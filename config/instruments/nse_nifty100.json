@@ -1,0 +1,86 @@
+{
+  "version": "2026.11.1",
+  "universe": "NIFTY_100_LIQUID",
+  "instruments": [
+    {
+      "symbol": "RELIANCE",
+      "exchange": "NSE",
+      "isin": "INE002A01018",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1850.0",
+      "eligible": true
+    },
+    {
+      "symbol": "TCS",
+      "exchange": "NSE",
+      "isin": "INE467B01029",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1120.0",
+      "eligible": true
+    },
+    {
+      "symbol": "HDFCBANK",
+      "exchange": "NSE",
+      "isin": "INE040A01034",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "2400.0",
+      "eligible": true
+    },
+    {
+      "symbol": "ICICIBANK",
+      "exchange": "NSE",
+      "isin": "INE090A01021",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1650.0",
+      "eligible": true
+    },
+    {
+      "symbol": "INFY",
+      "exchange": "NSE",
+      "isin": "INE009A01021",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1340.0",
+      "eligible": true
+    },
+    {
+      "symbol": "SBIN",
+      "exchange": "NSE",
+      "isin": "INE062A01020",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1590.0",
+      "eligible": true
+    },
+    {
+      "symbol": "TATAMOTORS",
+      "exchange": "NSE",
+      "isin": "INE155A01022",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1420.0",
+      "eligible": true
+    },
+    {
+      "symbol": "ILLIQUID_TEST",
+      "exchange": "NSE",
+      "isin": "INE999Z01011",
+      "tick_size": "0.05",
+      "price_band_pct": "5.0",
+      "is_fno": false,
+      "median_daily_turnover_cr": "4.5",
+      "eligible": false
+    }
+  ]
+}

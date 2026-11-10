@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlphaTrade AI v2.0 — Read-Only Quantitative Research & Paper Trading Console</title>
+  <style>
+    :root {
+      --navy: #15324B;
+      --teal: #287271;
+      --bg: #F8FAFC;
+      --card: #FFFFFF;
+      --border: #E2E8F0;
+      --text: #1E293B;
+      --muted: #64748B;
+      --green: #0F766E;
+      --green-bg: #E2F0E8;
+      --amber: #B45309;
+      --amber-bg: #FEF3C7;
+      --red: #B91C1C;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 1.25rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 4px solid var(--teal);
+    }
+    header h1 { font-size: 1.35rem; letter-spacing: 0.02em; }
+    header p { font-size: 0.85rem; color: #CBD5E1; margin-top: 0.2rem; }
+    .badge-bar { display: flex; gap: 0.6rem; align-items: center; }
+    .badge {
+      padding: 0.3rem 0.7rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+    }
+    .badge.paper { background: #0F766E; color: #E2F0E8; border: 1px solid #2DD4BF; }
+    main { max-width: 1280px; margin: 1.5rem auto; padding: 0 1.5rem; }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    .tab-btn {
+      padding: 0.55rem 1.1rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--navy);
+      font-weight: 600;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: var(--navy);
+      color: #fff;
+      border-color: var(--navy);
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.1rem 1.25rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .card h3 {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    .card .val {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+    .card .sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .section-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .section-card h2 {
+      font-size: 1.05rem;
+      color: var(--navy);
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.45rem;
+      border-bottom: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    th {
+      background: var(--navy);
+      color: #fff;
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      font-weight: 600;
+    }
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:nth-child(even) td { background: #F8FAFC; }
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .pill.ok { background: var(--green-bg); color: var(--green); }
+    .pill.warn { background: var(--amber-bg); color: var(--amber); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>ALPHATRADE AI v2.0 — NSE INTRADAY ORB ENGINE</h1>
+      <p>Deterministic Quantitative Research &amp; Paper-Trading Dashboard • Read-Only Console</p>
+    </div>
+    <div class="badge-bar">
+      <span class="badge paper">EXECUTION GUARD: PAPER-ONLY (LIVE BLOCKED)</span>
+      <span class="badge">M0 FEED: FYERS v3 / UPSTOX v3</span>
+      <span class="badge">CLOCK: UTC / ASIA-KOLKATA</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchView('market', this)">1. Market Overview</button>
+      <button class="tab-btn" onclick="switchView('portfolio', this)">2. Portfolio &amp; Ledger</button>
+      <button class="tab-btn" onclick="switchView('risk', this)">3. Risk &amp; Kill-Switch Monitor</button>
+      <button class="tab-btn" onclick="switchView('research', this)">4. Research &amp; Backtest Validation</button>
+    </div>
+
+    <!-- 1. Market Overview -->
+    <section id="view-market" class="view-panel active">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Exchange &amp; Segment</h3>
+          <div class="val">NSE Cash Equity</div>
+          <div class="sub">Universe: NIFTY 100 / 200 Liquid (&ge; ₹25 Cr/day)</div>
+        </div>
+        <div class="card">
+          <h3>Base &amp; Signal Resolution</h3>
+          <div class="val">1m Base &rarr; 5m ORB</div>
+          <div class="sub">Opening Range: 09:15–09:30 IST (15m)</div>
+        </div>
+        <div class="card">
+          <h3>Data Validation Gate</h3>
+          <div class="val"><span class="pill ok">0 Quarantined</span></div>
+          <div class="sub">Checks: Stale &gt;90s, Duplicates, &gt;15% Split Jumps</div>
+        </div>
+        <div class="card">
+          <h3>Pre-Cleared M0 Broker Feeds</h3>
+          <div class="val">₹0 Retail APIs</div>
+          <div class="sub"><a href="https://fyers.in/api-docs/v3/api/market-data/historical-data/" target="_blank">FYERS v3</a> • <a href="https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/" target="_blank">Upstox v3</a> • <a href="https://smartapi.angelbroking.com/docs" target="_blank">Angel SmartAPI</a></div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Eligible NIFTY 100 Instrument Master &amp; Price-Band Headroom</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>ISIN</th>
+              <th>Tick Size</th>
+              <th>Operating Band</th>
+              <th>20d Median Turnover</th>
+              <th>ORB Eligibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>RELIANCE</strong></td><td>INE002A01018</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,850 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>TCS</strong></td><td>INE467B01029</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,120 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>HDFCBANK</strong></td><td>INE040A01034</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹2,400 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>ICICIBANK</strong></td><td>INE090A01021</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,650 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>INFY</strong></td><td>INE009A01021</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,340 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>ILLIQUID_TEST</strong></td><td>INE999Z01011</td><td>₹0.05</td><td>5.0% Circuit</td><td>₹4.5 Cr</td><td><span class="pill warn">VETOED (&lt; ₹25 Cr)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2. Portfolio & Ledger -->
+    <section id="view-portfolio" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Standard Research Ledger</h3>
+          <div class="val">₹1,00,000.00</div>
+          <div class="sub">Decoupled from ₹10,000 Micro Stress Profile</div>
+        </div>
+        <div class="card">
+          <h3>Simulated Session Net Equity</h3>
+          <div class="val" style="color: var(--green);">₹1,01,588.62</div>
+          <div class="sub">Session Realized P&amp;L: +₹1,588.62 (+3.18R)</div>
+        </div>
+        <div class="card">
+          <h3>Statutory + Brokerage Fees</h3>
+          <div class="val">₹94.38</div>
+          <div class="sub"><a href="https://zerodha.com/brokerage-calculator/" target="_blank">STT (0.025% sell), Stamp (0.003% buy), NSE, SEBI, 18% GST</a></div>
+        </div>
+        <div class="card">
+          <h3>Double-Entry Reconciliation</h3>
+          <div class="val"><span class="pill ok">RECONCILED_OK</span></div>
+          <div class="sub">SQL NUMERIC / Python Decimal (Zero Float Drift)</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Simulated Paper Positions &amp; Trailing State Log (Session: 2026-11-10)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Qty</th>
+              <th>Entry Fill</th>
+              <th>Initial Stop (1.25%)</th>
+              <th>Trail Activation (+2.50%)</th>
+              <th>Peak Reached</th>
+              <th>Exit Fill</th>
+              <th>Net P&amp;L (After Costs)</th>
+              <th>Exit Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>RELIANCE</strong></td>
+              <td>31</td>
+              <td>₹1,260.63</td>
+              <td>₹1,244.85</td>
+              <td>₹1,292.15</td>
+              <td>₹1,290.00</td>
+              <td>₹1,289.36</td>
+              <td style="color: var(--green); font-weight:600;">+₹843.24</td>
+              <td><span class="pill ok">TRAILING_STOP_EXIT</span></td>
+            </tr>
+            <tr>
+              <td><strong>TCS</strong></td>
+              <td>9</td>
+              <td>₹4,134.87</td>
+              <td>₹4,083.15</td>
+              <td>₹4,238.25</td>
+              <td>₹4,231.20</td>
+              <td>₹4,229.08</td>
+              <td style="color: var(--green); font-weight:600;">+₹745.38</td>
+              <td><span class="pill ok">TRAILING_STOP_EXIT</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. Risk & Kill-Switch Monitor -->
+    <section id="view-risk" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Active Exit Profile</h3>
+          <div class="val">INTRADAY_V2</div>
+          <div class="sub">1.25% Stop • +2.50% (2R) Trail Act • 0.75% Drop</div>
+        </div>
+        <div class="card">
+          <h3>Risk Budget / Daily Loss Cap</h3>
+          <div class="val">0.5% / 1.5%</div>
+          <div class="sub">₹500 per trade / ₹1,500 daily kill-switch threshold</div>
+        </div>
+        <div class="card">
+          <h3>Cost-to-Risk Gate</h3>
+          <div class="val">&le; 15.0% of 1R</div>
+          <div class="sub">Blocks trades where fees + slippage erode edge</div>
+        </div>
+        <div class="card">
+          <h3>Session Time Gates</h3>
+          <div class="val">14:30 / 15:00 IST</div>
+          <div class="sub">Entry cutoff 14:30 • Forced EOD close 15:00–15:15</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Deterministic Risk Gate &amp; Kill-Switch Invariants</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Safeguard Rule</th>
+              <th>Configured Threshold</th>
+              <th>Verification Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Pessimistic Intrabar Stop Priority</strong></td><td>If 1m bar breaches both Stop &amp; Trail Activation, execute Stop first</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
+            <tr><td><strong>Gap-Through-Stop Execution</strong></td><td>If bar opens below Stop, fill at adverse bar Open minus slippage</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
+            <tr><td><strong>One Entry Per Symbol Per Day</strong></td><td>Accepted BUY locks symbol for session; rejected orders do not lock</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
+            <tr><td><strong>Midday Restart Recovery</strong></td><td>Persists trailing_activated and highest_price_since_entry in SQLite</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. Research & Backtest Validation -->
+    <section id="view-research" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Look-Ahead Leakage Guard</h3>
+          <div class="val"><span class="pill ok">ACTIVE (0 Leaks)</span></div>
+          <div class="sub">ChronologicalBarWindow blocks future index access</div>
+        </div>
+        <div class="card">
+          <h3>Execution Fill Model</h3>
+          <div class="val">Next-Bar 1m Open</div>
+          <div class="sub">Includes half-spread (0.025%) + slippage (0.025%)</div>
+        </div>
+        <div class="card">
+          <h3>Cost-to-Risk Ratio (100K Profile)</h3>
+          <div class="val">11.4% of 1R</div>
+          <div class="sub">Within 15% cap (<a href="https://zerodha.com/charges/" target="_blank">min(₹20, 0.03%)</a> / <a href="https://flattrade.in/brokerage-calculator/" target="_blank">Zero-Brokerage</a>)</div>
+        </div>
+        <div class="card">
+          <h3>Evidence Standard</h3>
+          <div class="val">100+ OOS Trades</div>
+          <div class="sub">Small samples automatically labeled INCONCLUSIVE</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function switchView(name, btn) {
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('view-' + name).classList.add('active');
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "version": "2026.11.1",
+  "effective_date": "2026-11-01",
+  "source_urls": {
+    "zerodha_charges": "https://zerodha.com/charges/",
+    "zerodha_calculator": "https://zerodha.com/brokerage-calculator/",
+    "flattrade_calculator": "https://flattrade.in/brokerage-calculator/"
+  },
+  "profiles": {
+    "PERCENTAGE_CAPPED_DEFAULT": {
+      "brokerage_pct": "0.0003",
+      "brokerage_flat_cap_inr": "20.00",
+      "stt_buy_pct": "0.0000",
+      "stt_sell_pct": "0.00025",
+      "exchange_txn_pct": "0.0000297",
+      "sebi_turnover_pct": "0.000001",
+      "ipft_pct": "0.000001",
+      "stamp_duty_buy_pct": "0.00003",
+      "stamp_duty_sell_pct": "0.0000",
+      "gst_pct": "0.18",
+      "half_spread_pct": "0.00025",
+      "slippage_pct": "0.00025"
+    },
+    "ZERO_BROKERAGE_TIER": {
+      "brokerage_pct": "0.0000",
+      "brokerage_flat_cap_inr": "0.00",
+      "stt_buy_pct": "0.0000",
+      "stt_sell_pct": "0.00025",
+      "exchange_txn_pct": "0.0000297",
+      "sebi_turnover_pct": "0.000001",
+      "ipft_pct": "0.000001",
+      "stamp_duty_buy_pct": "0.00003",
+      "stamp_duty_sell_pct": "0.0000",
+      "gst_pct": "0.18",
+      "half_spread_pct": "0.00025",
+      "slippage_pct": "0.00025"
+    }
+  }
+}
