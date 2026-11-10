@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+import os
 import sqlite3
 from typing import Any, Type, TypeVar
 
@@ -338,6 +339,40 @@ class AuditEventRecord(BaseRecord):
   __tablename__ = "audit_events"
 
 
+def _serialize_value(val: Any) -> Any:
+  if val is None:
+    return None
+  if isinstance(val, Decimal):
+    return str(val)
+  if isinstance(val, datetime):
+    return val.isoformat()
+  if isinstance(val, bool):
+    return 1 if val else 0
+  if isinstance(val, (int, float, str)):
+    return val
+  return str(val)
+
+
+def _deserialize_value(val: Any, col_type: str) -> Any:
+  if val is None:
+    return None
+  col_type = col_type.upper()
+  if "NUMERIC" in col_type or "DECIMAL" in col_type:
+    return Decimal(str(val))
+  if col_type == "BOOLEAN":
+    return bool(val)
+  if "INT" in col_type:
+    return int(val)
+  if "TIMESTAMP" in col_type:
+    if isinstance(val, str):
+      try:
+        return datetime.fromisoformat(val)
+      except Exception:
+        return val
+    return val
+  return val
+
+
 class QueryProxy:
   def __init__(self, session: "Session", model_cls: Type[BaseRecord]):
     self.session = session
@@ -366,66 +401,196 @@ class QueryProxy:
     return self
 
   def all(self) -> list[Any]:
-    items = [
-        obj
-        for obj in self.session._store.get(self.model_cls.__tablename__, [])
-        if all(getattr(obj, col, None) == val for col, val in self.filters)
-    ]
-    if self.order:
-      col, direction = self.order
-      items = sorted(items, key=lambda x: getattr(x, col, 0) or 0, reverse=(direction == "DESC"))
-    if self._limit is not None:
-      items = items[: self._limit]
-    return items
+    self.session.flush()
+
+    tbl = self.model_cls.__tablename__
+    schema = self.session.schema.get(tbl, {})
+
+    clauses: list[str] = []
+    params: list[Any] = []
+    for col, val in self.filters:
+      if val is None:
+        clauses.append(f"[{col}] IS NULL")
+      else:
+        clauses.append(f"[{col}] = ?")
+        params.append(_serialize_value(val))
+
+    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    order_sql = f" ORDER BY [{self.order[0]}] {self.order[1]}" if self.order else ""
+    limit_sql = f" LIMIT {int(self._limit)}" if self._limit is not None else ""
+
+    sql = f"SELECT * FROM [{tbl}]{where_sql}{order_sql}{limit_sql}"
+
+    cur = self.session.conn.cursor()
+    rows = cur.execute(sql, params).fetchall()
+
+    results: list[Any] = []
+    col_names = [d[0] for d in cur.description] if cur.description else []
+    for row in rows:
+      row_dict: dict[str, Any] = {}
+      for idx, col_name in enumerate(col_names):
+        val = row[idx]
+        ctype = schema.get(col_name, "TEXT")
+        row_dict[col_name] = _deserialize_value(val, ctype)
+
+      row_id = row_dict.get("id")
+      obj_key = (self.model_cls, row_id)
+
+      if obj_key in self.session._identity_map:
+        tracked_obj = self.session._identity_map[obj_key]
+        results.append(tracked_obj)
+      else:
+        obj = self.model_cls(**row_dict)
+        self.session._identity_map[obj_key] = obj
+        self.session._snapshot[obj_key] = {
+            col: getattr(obj, col, None) for col in schema.keys() if hasattr(obj, col)
+        }
+        results.append(obj)
+
+    return results
 
   def first(self) -> Any | None:
+    old_limit = self._limit
+    self._limit = 1
     res = self.all()
+    self._limit = old_limit
     return res[0] if res else None
 
 
 class Session:
-  """Lightweight unit-of-work session backed by SQLite DDL + in-memory/file synchronization."""
+  """Lightweight unit-of-work session backed by genuine SQLite disk persistence."""
 
-  def __init__(self, conn: sqlite3.Connection, store: dict[str, list[BaseRecord]], id_counters: dict[str, int]):
+  def __init__(self, conn: sqlite3.Connection, schema: dict[str, dict[str, str]]):
     self.conn = conn
-    self._store = store
-    self._id_counters = id_counters
+    self.schema = schema
+    self._pending_inserts: list[BaseRecord] = []
+    self._identity_map: dict[tuple[Type[BaseRecord], Any], BaseRecord] = {}
+    self._snapshot: dict[tuple[Type[BaseRecord], Any], dict[str, Any]] = {}
 
   def __enter__(self) -> "Session":
     return self
 
   def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-    pass
+    if exc_type is None:
+      self.commit()
+    else:
+      self.rollback()
 
   def add(self, obj: BaseRecord) -> None:
-    tbl = obj.__tablename__
-    bucket = self._store.setdefault(tbl, [])
-    if obj not in bucket:
-      self._id_counters[tbl] = self._id_counters.get(tbl, 0) + 1
-      obj.id = self._id_counters[tbl]
-      bucket.append(obj)
+    if getattr(obj, "id", None) is not None:
+      self._identity_map[(type(obj), obj.id)] = obj
+    else:
+      if obj not in self._pending_inserts:
+        self._pending_inserts.append(obj)
 
   def query(self, model_cls: Type[BaseRecord]) -> QueryProxy:
     return QueryProxy(self, model_cls)
 
   def flush(self) -> None:
-    pass
+    cur = self.conn.cursor()
+
+    # 1. Process pending inserts
+    inserts_to_process = list(self._pending_inserts)
+    self._pending_inserts.clear()
+
+    for obj in inserts_to_process:
+      tbl = obj.__tablename__
+      table_schema = self.schema.get(tbl, {})
+      cols: list[str] = []
+      vals: list[Any] = []
+
+      for col_name in table_schema.keys():
+        if col_name == "id":
+          if getattr(obj, "id", None) is not None:
+            cols.append(f"[{col_name}]")
+            vals.append(obj.id)
+          continue
+        if hasattr(obj, col_name):
+          cols.append(f"[{col_name}]")
+          vals.append(_serialize_value(getattr(obj, col_name)))
+
+      if cols:
+        col_str = ", ".join(cols)
+        placeholder_str = ", ".join(["?"] * len(vals))
+        cur.execute(f"INSERT INTO [{tbl}] ({col_str}) VALUES ({placeholder_str})", vals)
+        if getattr(obj, "id", None) is None:
+          obj.id = cur.lastrowid
+
+      obj_key = (type(obj), obj.id)
+      self._identity_map[obj_key] = obj
+      self._snapshot[obj_key] = {
+          col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
+      }
+
+    # 2. Process updates for tracked instances in identity map
+    for (model_cls, obj_id), obj in list(self._identity_map.items()):
+      tbl = obj.__tablename__
+      table_schema = self.schema.get(tbl, {})
+      snapshot = self._snapshot.get((model_cls, obj_id), {})
+
+      dirty = False
+      update_cols: list[str] = []
+      update_vals: list[Any] = []
+
+      for col_name in table_schema.keys():
+        if col_name == "id":
+          continue
+        curr_val = getattr(obj, col_name, None)
+        snap_val = snapshot.get(col_name)
+        if curr_val != snap_val:
+          dirty = True
+        if hasattr(obj, col_name):
+          update_cols.append(f"[{col_name}] = ?")
+          update_vals.append(_serialize_value(curr_val))
+
+      if dirty and update_cols:
+        update_vals.append(obj.id)
+        sql = f"UPDATE [{tbl}] SET {', '.join(update_cols)} WHERE [id] = ?"
+        cur.execute(sql, update_vals)
+        self._snapshot[(model_cls, obj_id)] = {
+            col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
+        }
 
   def commit(self) -> None:
+    self.flush()
     self.conn.commit()
+
+  def rollback(self) -> None:
+    self._pending_inserts.clear()
+    self.conn.rollback()
 
 
 def init_db(database_url: str = "sqlite:///:memory:"):
   path = ":memory:"
   if database_url.startswith("sqlite:///"):
     path = database_url[len("sqlite:///") :]
+
+  if path != ":memory:":
+    parent_dir = os.path.dirname(os.path.abspath(path))
+    if parent_dir and not os.path.exists(parent_dir):
+      os.makedirs(parent_dir, exist_ok=True)
+
   conn = sqlite3.connect(path, check_same_thread=False)
+  conn.row_factory = sqlite3.Row
+  if path != ":memory:":
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
   conn.executescript(SCHEMA_DDL)
   conn.commit()
-  shared_store: dict[str, list[BaseRecord]] = {}
-  shared_counters: dict[str, int] = {}
+
+  cur = conn.cursor()
+  tables = [
+      r[0]
+      for r in cur.execute(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      ).fetchall()
+  ]
+  schema: dict[str, dict[str, str]] = {}
+  for t in tables:
+    cols = cur.execute(f"PRAGMA table_info([{t}])").fetchall()
+    schema[t] = {c[1]: c[2].upper() for c in cols}
 
   def SessionLocal() -> Session:
-    return Session(conn, shared_store, shared_counters)
+    return Session(conn, schema)
 
   return conn, SessionLocal

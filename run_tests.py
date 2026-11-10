@@ -42,6 +42,7 @@ def run_all() -> int:
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
+          lambda: t_broker.test_cross_process_restart_persistence(Path(tempfile.mkdtemp())),
       ]),
       ("backtest/test_backtester_and_lookahead.py", [
           t_bt.test_deliberate_lookahead_bug_caught,
