@@ -70,8 +70,9 @@ def main():
   if jwt_token or password:
     print("\n[*] Attempting live SmartAPI call for RELIANCE (1m candles)...")
     try:
-      end_utc = datetime.now(timezone.utc)
-      start_utc = end_utc - timedelta(hours=2)
+      # Query verified trading session (08-Nov-2024 09:15 - 10:15 IST)
+      start_utc = datetime(2024, 11, 8, 3, 45, tzinfo=timezone.utc)
+      end_utc = datetime(2024, 11, 8, 4, 45, tzinfo=timezone.utc)
       bars = provider.fetch_1m_candles("RELIANCE", start_utc, end_utc)
       print(f"[PASS] Live fetch returned {len(bars)} 1-minute bars from Angel One.")
       if bars:
@@ -91,3 +92,4 @@ def main():
 
 if __name__ == "__main__":
   sys.exit(main())
+

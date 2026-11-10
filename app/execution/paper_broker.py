@@ -233,6 +233,7 @@ class PaperBroker:
           closed_at_utc=None,
       )
       self.db.add(pos)
+      self.ledger.register_open_position(pos)
     else:
       # Partial fill completion on the same entry order
       total_qty = pos.quantity + fill.quantity
@@ -266,6 +267,7 @@ class PaperBroker:
     pos.exit_reason = order.reason or "STRATEGY_EXIT"
     pos.closed_at_utc = fill.timestamp_utc
     self.db.flush()
+    self.ledger.register_closed_position(pos)
     return pos
 
   def recover_state_after_restart(self) -> dict[str, PositionRecord]:

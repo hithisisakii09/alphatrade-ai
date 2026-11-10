@@ -17,12 +17,14 @@ from app.execution.costs import NSECostEngine
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
 from app.risk.engine import RiskEngine
+from app.services.daily_runner import ScheduledDailyRunner
 
 router = APIRouter()
 
 _cfg = load_app_config()
 _engine, _SessionLocal = init_db(_cfg.database_url)
 _calendar = NSECalendar()
+_daily_runner = ScheduledDailyRunner(config=_cfg)
 
 
 @router.get("/health")
@@ -199,6 +201,16 @@ def get_daily_report_endpoint(session_date: str = "2026-11-10"):
 def get_backtests():
   with _SessionLocal() as db:
     return {"backtest_runs": list_backtest_summaries(db)}
+
+
+@router.get("/runner/status")
+def get_runner_status():
+  return {
+      "is_running": _daily_runner.is_running,
+      "scheduler_timezone": "Asia/Kolkata",
+      "jobs_count": len(_daily_runner.get_jobs_summary()),
+      "jobs": _daily_runner.get_jobs_summary(),
+  }
 
 
 @router.get("/", response_class=HTMLResponse)

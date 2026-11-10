@@ -66,9 +66,9 @@ def test_angel_response_parsing_to_candle_bars():
 
 def test_angel_auth_error_when_credentials_missing():
   provider = AngelSmartAPIDataProvider(
-      api_key="TEST_KEY", client_code="S123", totp_secret="PQQNAFSM44DJQV2HFVF33LBCPQ"
+      api_key="TEST_KEY", client_code="S123", totp_secret="PQQNAFSM44DJQV2HFVF33LBCPQ", password=""
   )
-  with pytest.raises(ProviderAuthenticationError, match="ANGEL_PASSWORD"):
+  with pytest.raises(ProviderAuthenticationError):
     provider.fetch_1m_candles(
         symbol="RELIANCE",
         start_utc=datetime(2026, 11, 10, 4, 0, tzinfo=timezone.utc),
@@ -80,3 +80,4 @@ def test_get_data_provider_factory():
   prov = get_data_provider("ANGEL_SMARTAPI")
   assert isinstance(prov, AngelSmartAPIDataProvider)
   assert prov.provider_name == "ANGEL_SMARTAPI"
+

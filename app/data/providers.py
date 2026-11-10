@@ -99,7 +99,8 @@ class AngelSmartAPIDataProvider:
   """Read-only adapter for Angel One SmartAPI Historical Candles (M0 Primary)."""
 
   provider_name = "ANGEL_SMARTAPI"
-  BASE_URL = "https://apiconnect.angelbroking.com"
+  BASE_URL = "https://apiconnect.angelone.in"
+  LOGIN_URL = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
 
   def __init__(
       self,
@@ -138,7 +139,7 @@ class AngelSmartAPIDataProvider:
       raise ProviderAuthenticationError("ANGEL_API_KEY is required for Angel One login.")
 
     totp = generate_totp(self.totp_secret)
-    url = f"{self.BASE_URL}/rest/secure/angelbroking/user/v1/loginByPassword"
+    url = self.LOGIN_URL
     payload = {
         "clientcode": self.client_code,
         "password": pwd,

@@ -118,6 +118,7 @@ class EventDrivenBacktester:
       sorted_bars = sorted(bars, key=lambda b: b.timestamp_utc)
       session_bars: list[CandleBar] = []
       current_session_date: str | None = None
+      orb_state = None
       prev_close = prev_closes_by_symbol.get(sym, Decimal("1000.00"))
       lower_circuit, upper_circuit = self.registry.compute_price_bands(sym, prev_close)
 
@@ -133,10 +134,12 @@ class EventDrivenBacktester:
         if s_date != current_session_date:
           current_session_date = s_date
           session_bars = []
+          orb_state = None
           self.risk_engine.reset_kill_switch()
 
         session_bars.append(bar)
-        orb_state = compute_opening_range(session_bars, self.config.strategy.opening_range_minutes)
+        if orb_state is None or not orb_state.is_complete:
+          orb_state = compute_opening_range(session_bars, self.config.strategy.opening_range_minutes)
 
         # 1. Execute any pending order at THIS bar's open (next-bar open execution)
         if sym in pending_orders_by_symbol:
@@ -168,10 +171,15 @@ class EventDrivenBacktester:
               trailing_activated=bool(open_pos.trailing_activated),
               highest_price_since_entry=to_decimal(open_pos.highest_price_since_entry),
           )
-          open_pos.trailing_activated = eval_res.trailing_activated
-          open_pos.highest_price_since_entry = eval_res.highest_price_since_entry
-          open_pos.current_stop_price = eval_res.current_stop_price
-          self.db.commit()
+          if (
+              open_pos.trailing_activated != eval_res.trailing_activated
+              or open_pos.highest_price_since_entry != eval_res.highest_price_since_entry
+              or open_pos.current_stop_price != eval_res.current_stop_price
+          ):
+            open_pos.trailing_activated = eval_res.trailing_activated
+            open_pos.highest_price_since_entry = eval_res.highest_price_since_entry
+            open_pos.current_stop_price = eval_res.current_stop_price
+            self.db.flush()
 
           if eval_res.should_exit and eval_res.trigger_price is not None:
             exit_order, _ = self.broker.submit_order(

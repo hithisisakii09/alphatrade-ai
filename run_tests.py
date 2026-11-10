@@ -9,7 +9,9 @@ from tests.unit import test_core_and_indicators as t_core
 from tests.unit import test_risk_and_costs as t_risk
 from tests.unit import test_angel_provider as t_angel
 from tests.integration import test_broker_and_recovery as t_broker
+from tests.integration import test_daily_runner as t_runner
 from tests.backtest import test_backtester_and_lookahead as t_bt
+from tests.backtest import test_walk_forward_oos as t_oos
 from tests.safety import test_live_guard_and_edge_cases as t_safe
 
 
@@ -52,9 +54,17 @@ def run_all() -> int:
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
           lambda: t_broker.test_cross_process_restart_persistence(Path(tempfile.mkdtemp())),
       ]),
+      ("integration/test_daily_runner.py", [
+          t_runner.test_scheduled_daily_runner_jobs_and_lifecycle,
+          t_runner.test_runner_status_fastapi_endpoint,
+      ]),
       ("backtest/test_backtester_and_lookahead.py", [
           t_bt.test_deliberate_lookahead_bug_caught,
           lambda: t_bt.test_reproducible_end_to_end_benchmark_and_api_routes(Path(tempfile.mkdtemp())),
+      ]),
+      ("backtest/test_walk_forward_oos.py", [
+          t_oos.test_walk_forward_chronological_split_integrity,
+          t_oos.test_100_trade_out_of_sample_and_slippage_stress_matrix,
       ]),
       ("safety/test_live_guard_and_edge_cases.py", [
           lambda: _run_with_monkeypatch(t_safe.test_live_mode_rejected_at_startup_and_by_guard),

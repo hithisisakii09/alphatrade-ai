@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AlphaTrade AI v2.0 — Read-Only Quantitative Research & Paper Trading Console</title>
+  <title>AlphaTrade AI v2.0 — Live Quantitative Research & Paper Trading Console</title>
   <style>
     :root {
       --navy: #15324B;
@@ -18,6 +18,7 @@
       --amber: #B45309;
       --amber-bg: #FEF3C7;
       --red: #B91C1C;
+      --red-bg: #FEE2E2;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -37,7 +38,7 @@
     }
     header h1 { font-size: 1.35rem; letter-spacing: 0.02em; }
     header p { font-size: 0.85rem; color: #CBD5E1; margin-top: 0.2rem; }
-    .badge-bar { display: flex; gap: 0.6rem; align-items: center; }
+    .badge-bar { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
     .badge {
       padding: 0.3rem 0.7rem;
       border-radius: 4px;
@@ -47,11 +48,29 @@
       color: #fff;
     }
     .badge.paper { background: #0F766E; color: #E2F0E8; border: 1px solid #2DD4BF; }
+    .badge.feed { background: #287271; color: #fff; }
+    .badge.live-dot {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2DD4BF;
+      box-shadow: 0 0 6px #2DD4BF;
+    }
     main { max-width: 1280px; margin: 1.5rem auto; padding: 0 1.5rem; }
+    .top-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
     .tabs {
       display: flex;
       gap: 0.5rem;
-      margin-bottom: 1.25rem;
       border-bottom: 2px solid var(--border);
       padding-bottom: 0.5rem;
     }
@@ -64,12 +83,31 @@
       font-size: 0.9rem;
       border-radius: 6px;
       cursor: pointer;
+      transition: all 0.2s;
     }
     .tab-btn.active {
       background: var(--navy);
       color: #fff;
       border-color: var(--navy);
     }
+    .sync-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .refresh-btn {
+      padding: 0.4rem 0.8rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--navy);
+    }
+    .refresh-btn:hover { background: #F1F5F9; }
     .view-panel { display: none; }
     .view-panel.active { display: block; }
     .kpi-grid {
@@ -115,6 +153,9 @@
       margin-bottom: 0.85rem;
       padding-bottom: 0.45rem;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     table {
       width: 100%;
@@ -142,6 +183,7 @@
     }
     .pill.ok { background: var(--green-bg); color: var(--green); }
     .pill.warn { background: var(--amber-bg); color: var(--amber); }
+    .pill.danger { background: var(--red-bg); color: var(--red); }
   </style>
 </head>
 <body>
@@ -151,65 +193,72 @@
       <p>Deterministic Quantitative Research &amp; Paper-Trading Dashboard • Read-Only Console</p>
     </div>
     <div class="badge-bar">
-      <span class="badge paper">EXECUTION GUARD: PAPER-ONLY (LIVE BLOCKED)</span>
-      <span class="badge">M0 FEED: FYERS v3 / UPSTOX v3</span>
-      <span class="badge">CLOCK: UTC / ASIA-KOLKATA</span>
+      <span class="badge paper">EXECUTION GUARD: PAPER-ONLY</span>
+      <span id="badge-feed" class="badge feed">M0 FEED: ANGEL_SMARTAPI</span>
+      <span id="badge-market" class="badge live-dot"><span class="pulse-dot"></span>MARKET: CONNECTED</span>
     </div>
   </header>
 
   <main>
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchView('market', this)">1. Market Overview</button>
-      <button class="tab-btn" onclick="switchView('portfolio', this)">2. Portfolio &amp; Ledger</button>
-      <button class="tab-btn" onclick="switchView('risk', this)">3. Risk &amp; Kill-Switch Monitor</button>
-      <button class="tab-btn" onclick="switchView('research', this)">4. Research &amp; Backtest Validation</button>
+    <div class="top-controls">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchView('market', this)">1. Market Overview</button>
+        <button class="tab-btn" onclick="switchView('portfolio', this)">2. Portfolio &amp; Ledger</button>
+        <button class="tab-btn" onclick="switchView('orders', this)">3. Orders &amp; Fills</button>
+        <button class="tab-btn" onclick="switchView('risk', this)">4. Risk &amp; Kill-Switch Monitor</button>
+        <button class="tab-btn" onclick="switchView('runner', this)">5. APScheduler Runner</button>
+      </div>
+      <div class="sync-bar">
+        <span id="sync-status">Live polling active (5s)</span>
+        <button class="refresh-btn" onclick="refreshAllData()">&#x21bb; Refresh Now</button>
+      </div>
     </div>
 
     <!-- 1. Market Overview -->
     <section id="view-market" class="view-panel active">
       <div class="kpi-grid">
         <div class="card">
-          <h3>Exchange &amp; Segment</h3>
-          <div class="val">NSE Cash Equity</div>
-          <div class="sub">Universe: NIFTY 100 / 200 Liquid (&ge; ₹25 Cr/day)</div>
+          <h3>Exchange &amp; Market State</h3>
+          <div id="kpi-market-state" class="val">NSE Cash Equity</div>
+          <div class="sub">Session: <span id="val-session-state">NORMAL_TRADING</span> • Timezone: Asia/Kolkata</div>
         </div>
         <div class="card">
-          <h3>Base &amp; Signal Resolution</h3>
-          <div class="val">1m Base &rarr; 5m ORB</div>
-          <div class="sub">Opening Range: 09:15–09:30 IST (15m)</div>
+          <h3>Strategy Profile</h3>
+          <div class="val">INTRADAY_V2</div>
+          <div class="sub">15m Opening Range (09:15–09:30 IST) &rarr; 5m Breakout</div>
         </div>
         <div class="card">
-          <h3>Data Validation Gate</h3>
-          <div class="val"><span class="pill ok">0 Quarantined</span></div>
-          <div class="sub">Checks: Stale &gt;90s, Duplicates, &gt;15% Split Jumps</div>
+          <h3>Data Provider Status</h3>
+          <div id="kpi-provider-name" class="val">ANGEL_SMARTAPI</div>
+          <div class="sub">Rate limit &le; 3 req/sec • RFC 6238 TOTP Authenticated</div>
         </div>
         <div class="card">
-          <h3>Pre-Cleared M0 Broker Feeds</h3>
-          <div class="val">₹0 Retail APIs</div>
-          <div class="sub"><a href="https://fyers.in/api-docs/v3/api/market-data/historical-data/" target="_blank">FYERS v3</a> • <a href="https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/" target="_blank">Upstox v3</a> • <a href="https://smartapi.angelbroking.com/docs" target="_blank">Angel SmartAPI</a></div>
+          <h3>Data Quality Invariants</h3>
+          <div id="kpi-quality-events" class="val"><span class="pill ok">0 Anomalies</span></div>
+          <div class="sub">Enforced: &gt;90s Staleness, Duplicates, &gt;15% Split Jumps</div>
         </div>
       </div>
 
       <div class="section-card">
-        <h2>Eligible NIFTY 100 Instrument Master &amp; Price-Band Headroom</h2>
+        <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
           <thead>
             <tr>
               <th>Symbol</th>
-              <th>ISIN</th>
+              <th>SmartAPI Token</th>
               <th>Tick Size</th>
-              <th>Operating Band</th>
-              <th>20d Median Turnover</th>
+              <th>Price Band Mode</th>
+              <th>20d Turnover</th>
               <th>ORB Eligibility</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td><strong>RELIANCE</strong></td><td>INE002A01018</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,850 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
-            <tr><td><strong>TCS</strong></td><td>INE467B01029</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,120 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
-            <tr><td><strong>HDFCBANK</strong></td><td>INE040A01034</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹2,400 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
-            <tr><td><strong>ICICIBANK</strong></td><td>INE090A01021</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,650 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
-            <tr><td><strong>INFY</strong></td><td>INE009A01021</td><td>₹0.05</td><td><a href="https://www.nseindia.com/static/products-services/equity-market-price-bands" target="_blank">10.0% (F&amp;O Dynamic)</a></td><td>₹1,340 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
-            <tr><td><strong>ILLIQUID_TEST</strong></td><td>INE999Z01011</td><td>₹0.05</td><td>5.0% Circuit</td><td>₹4.5 Cr</td><td><span class="pill warn">VETOED (&lt; ₹25 Cr)</span></td></tr>
+            <tr><td><strong>RELIANCE</strong></td><td>2885</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>TCS</strong></td><td>11536</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>HDFCBANK</strong></td><td>1333</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>ICICIBANK</strong></td><td>4963</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>INFY</strong></td><td>1594</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>SBIN</strong></td><td>3045</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -219,139 +268,138 @@
     <section id="view-portfolio" class="view-panel">
       <div class="kpi-grid">
         <div class="card">
-          <h3>Standard Research Ledger</h3>
-          <div class="val">₹1,00,000.00</div>
-          <div class="sub">Decoupled from ₹10,000 Micro Stress Profile</div>
+          <h3>Starting Capital</h3>
+          <div id="kpi-starting-capital" class="val">₹1,00,000.00</div>
+          <div class="sub">Profile: STANDARD_RESEARCH_100K</div>
         </div>
         <div class="card">
-          <h3>Simulated Session Net Equity</h3>
-          <div class="val" style="color: var(--green);">₹1,01,588.62</div>
-          <div class="sub">Session Realized P&amp;L: +₹1,588.62 (+3.18R)</div>
+          <h3>Current Cash Balance</h3>
+          <div id="kpi-cash-balance" class="val" style="color: var(--navy);">₹1,01,371.35</div>
+          <div class="sub">Available unallocated trading cash</div>
         </div>
         <div class="card">
-          <h3>Statutory + Brokerage Fees</h3>
-          <div class="val">₹94.38</div>
-          <div class="sub"><a href="https://zerodha.com/brokerage-calculator/" target="_blank">STT (0.025% sell), Stamp (0.003% buy), NSE, SEBI, 18% GST</a></div>
+          <h3>Session Realized P&amp;L</h3>
+          <div id="kpi-realized-pnl" class="val" style="color: var(--green);">+₹1,371.35</div>
+          <div class="sub">Net of statutory taxes and broker fees</div>
         </div>
         <div class="card">
-          <h3>Double-Entry Reconciliation</h3>
-          <div class="val"><span class="pill ok">RECONCILED_OK</span></div>
-          <div class="sub">SQL NUMERIC / Python Decimal (Zero Float Drift)</div>
+          <h3>Double-Entry Ledger</h3>
+          <div id="kpi-ledger-status" class="val"><span class="pill ok">RECONCILED_OK</span></div>
+          <div class="sub">Zero floating-point drift (Exact Decimal arithmetic)</div>
         </div>
       </div>
 
       <div class="section-card">
-        <h2>Simulated Paper Positions &amp; Trailing State Log (Session: 2026-11-10)</h2>
+        <h2>Live Positions &amp; Trailing Peak Tracker</h2>
         <table>
           <thead>
             <tr>
               <th>Symbol</th>
+              <th>Status</th>
               <th>Qty</th>
-              <th>Entry Fill</th>
+              <th>Entry Price</th>
+              <th>Exit Price</th>
               <th>Initial Stop (1.25%)</th>
-              <th>Trail Activation (+2.50%)</th>
-              <th>Peak Reached</th>
-              <th>Exit Fill</th>
-              <th>Net P&amp;L (After Costs)</th>
+              <th>Trailing Act (+2.50%)</th>
+              <th>Trailing Peak</th>
+              <th>Trailing Activated</th>
+              <th>Realized P&amp;L</th>
               <th>Exit Reason</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td><strong>RELIANCE</strong></td>
-              <td>31</td>
-              <td>₹1,260.63</td>
-              <td>₹1,244.85</td>
-              <td>₹1,292.15</td>
-              <td>₹1,290.00</td>
-              <td>₹1,289.36</td>
-              <td style="color: var(--green); font-weight:600;">+₹843.24</td>
-              <td><span class="pill ok">TRAILING_STOP_EXIT</span></td>
-            </tr>
-            <tr>
-              <td><strong>TCS</strong></td>
-              <td>9</td>
-              <td>₹4,134.87</td>
-              <td>₹4,083.15</td>
-              <td>₹4,238.25</td>
-              <td>₹4,231.20</td>
-              <td>₹4,229.08</td>
-              <td style="color: var(--green); font-weight:600;">+₹745.38</td>
-              <td><span class="pill ok">TRAILING_STOP_EXIT</span></td>
-            </tr>
+          <tbody id="positions-tbody">
+            <tr><td colspan="11" style="text-align:center; color:var(--muted);">Loading live positions...</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- 3. Risk & Kill-Switch Monitor -->
+    <!-- 3. Orders & Fills -->
+    <section id="view-orders" class="view-panel">
+      <div class="section-card">
+        <h2>Executed Paper Orders &amp; Audit Log</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Idempotency Key</th>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Req Qty</th>
+              <th>Filled Qty</th>
+              <th>Reference Price</th>
+              <th>Status</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody">
+            <tr><td colspan="9" style="text-align:center; color:var(--muted);">Loading live orders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. Risk & Kill-Switch Monitor -->
     <section id="view-risk" class="view-panel">
       <div class="kpi-grid">
         <div class="card">
-          <h3>Active Exit Profile</h3>
+          <h3>Active Exit Engine</h3>
           <div class="val">INTRADAY_V2</div>
-          <div class="sub">1.25% Stop • +2.50% (2R) Trail Act • 0.75% Drop</div>
+          <div class="sub">1.25% Stop • +2.50% Trail Activation • 0.75% Trail Drop</div>
         </div>
         <div class="card">
-          <h3>Risk Budget / Daily Loss Cap</h3>
-          <div class="val">0.5% / 1.5%</div>
-          <div class="sub">₹500 per trade / ₹1,500 daily kill-switch threshold</div>
+          <h3>Daily Loss Kill Switch</h3>
+          <div id="kpi-kill-switch" class="val"><span class="pill ok">STANDBY (INACTIVE)</span></div>
+          <div class="sub">Max daily loss cap: 1.5% (-₹1,500 on 100K)</div>
         </div>
         <div class="card">
           <h3>Cost-to-Risk Gate</h3>
           <div class="val">&le; 15.0% of 1R</div>
-          <div class="sub">Blocks trades where fees + slippage erode edge</div>
+          <div class="sub">Rejects breakouts when fees + slippage exceed 15% edge</div>
         </div>
         <div class="card">
-          <h3>Session Time Gates</h3>
+          <h3>Time Gate Windows</h3>
           <div class="val">14:30 / 15:00 IST</div>
-          <div class="sub">Entry cutoff 14:30 • Forced EOD close 15:00–15:15</div>
+          <div class="sub">Entry cutoff 14:30 • Forced EOD liquidation 15:00–15:15</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. APScheduler Runner -->
+    <section id="view-runner" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Scheduler State</h3>
+          <div id="kpi-runner-state" class="val">CONFIGURED</div>
+          <div class="sub">APScheduler BackgroundScheduler (Asia/Kolkata)</div>
+        </div>
+        <div class="card">
+          <h3>Registered Intraday Jobs</h3>
+          <div id="kpi-runner-jobs-count" class="val">6 Jobs</div>
+          <div class="sub">Pre-market, ORB formation, 1m tick, Cutoff, EOD close, Reconcile</div>
         </div>
       </div>
 
       <div class="section-card">
-        <h2>Deterministic Risk Gate &amp; Kill-Switch Invariants</h2>
+        <h2>Intraday Automated Job Timeline</h2>
         <table>
           <thead>
             <tr>
-              <th>Safeguard Rule</th>
-              <th>Configured Threshold</th>
-              <th>Verification Status</th>
+              <th>Job ID</th>
+              <th>Job Description</th>
+              <th>Cron Trigger</th>
+              <th>Target Action</th>
             </tr>
           </thead>
-          <tbody>
-            <tr><td><strong>Pessimistic Intrabar Stop Priority</strong></td><td>If 1m bar breaches both Stop &amp; Trail Activation, execute Stop first</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
-            <tr><td><strong>Gap-Through-Stop Execution</strong></td><td>If bar opens below Stop, fill at adverse bar Open minus slippage</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
-            <tr><td><strong>One Entry Per Symbol Per Day</strong></td><td>Accepted BUY locks symbol for session; rejected orders do not lock</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
-            <tr><td><strong>Midday Restart Recovery</strong></td><td>Persists trailing_activated and highest_price_since_entry in SQLite</td><td><span class="pill ok">VERIFIED BY PYTEST</span></td></tr>
+          <tbody id="runner-jobs-tbody">
+            <tr><td><code>nse_pre_market_0900</code></td><td>Pre-Market Calendar Verification</td><td>09:00 IST (Mon-Fri)</td><td>Checks holiday calendar &amp; special session status</td></tr>
+            <tr><td><code>nse_orb_formed_0930</code></td><td>Opening Range Formation</td><td>09:30 IST (Mon-Fri)</td><td>Computes 15m ORB High &amp; Low across liquid universe</td></tr>
+            <tr><td><code>nse_intraday_tick</code></td><td>Intraday 1m Tick &amp; 5m Signal Evaluation</td><td>09:31–14:29 IST (Mon-Fri)</td><td>Aggregates 5m bars, triggers breakouts, tracks trailing stops</td></tr>
+            <tr><td><code>nse_entry_cutoff_1430</code></td><td>Entry Cutoff Gate</td><td>14:30 IST (Mon-Fri)</td><td>Blocks any subsequent new long breakout entries</td></tr>
+            <tr><td><code>nse_eod_liquidation_1500</code></td><td>Forced EOD Liquidation</td><td>15:00 IST (Mon-Fri)</td><td>Liquidates all open positions before market close</td></tr>
+            <tr><td><code>nse_session_close_1530</code></td><td>Session Close &amp; Reconciliation</td><td>15:30 IST (Mon-Fri)</td><td>Verifies double-entry ledger &amp; persists daily metrics</td></tr>
           </tbody>
         </table>
-      </div>
-    </section>
-
-    <!-- 4. Research & Backtest Validation -->
-    <section id="view-research" class="view-panel">
-      <div class="kpi-grid">
-        <div class="card">
-          <h3>Look-Ahead Leakage Guard</h3>
-          <div class="val"><span class="pill ok">ACTIVE (0 Leaks)</span></div>
-          <div class="sub">ChronologicalBarWindow blocks future index access</div>
-        </div>
-        <div class="card">
-          <h3>Execution Fill Model</h3>
-          <div class="val">Next-Bar 1m Open</div>
-          <div class="sub">Includes half-spread (0.025%) + slippage (0.025%)</div>
-        </div>
-        <div class="card">
-          <h3>Cost-to-Risk Ratio (100K Profile)</h3>
-          <div class="val">11.4% of 1R</div>
-          <div class="sub">Within 15% cap (<a href="https://zerodha.com/charges/" target="_blank">min(₹20, 0.03%)</a> / <a href="https://flattrade.in/brokerage-calculator/" target="_blank">Zero-Brokerage</a>)</div>
-        </div>
-        <div class="card">
-          <h3>Evidence Standard</h3>
-          <div class="val">100+ OOS Trades</div>
-          <div class="sub">Small samples automatically labeled INCONCLUSIVE</div>
-        </div>
       </div>
     </section>
   </main>
@@ -363,6 +411,99 @@
       document.getElementById('view-' + name).classList.add('active');
       btn.classList.add('active');
     }
+
+    async function fetchJson(endpoint) {
+      try {
+        const resp = await fetch(endpoint);
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch (e) {
+        console.warn('Fetch failed for', endpoint, e);
+        return null;
+      }
+    }
+
+    async function refreshAllData() {
+      document.getElementById('sync-status').textContent = 'Fetching data...';
+
+      // 1. Portfolio & Daily Report
+      const portfolio = await fetchJson('/portfolio');
+      if (portfolio) {
+        document.getElementById('kpi-starting-capital').textContent = '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-cash-balance').textContent = '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        const recPill = portfolio.reconciled 
+          ? '<span class="pill ok">RECONCILED_OK</span>' 
+          : '<span class="pill danger">MISMATCH</span>';
+        document.getElementById('kpi-ledger-status').innerHTML = recPill;
+      }
+
+      const dailyRep = await fetchJson('/reports/daily');
+      if (dailyRep) {
+        const pnl = Number(dailyRep.realized_pnl_inr);
+        const prefix = pnl >= 0 ? '+₹' : '-₹';
+        document.getElementById('kpi-realized-pnl').textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-realized-pnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      }
+
+      // 2. Positions Table
+      const posData = await fetchJson('/positions');
+      const posTbody = document.getElementById('positions-tbody');
+      if (posData && posData.positions && posData.positions.length > 0) {
+        posTbody.innerHTML = posData.positions.map(p => `
+          <tr>
+            <td><strong>${p.symbol}</strong></td>
+            <td><span class="pill ${p.status === 'OPEN' ? 'warn' : 'ok'}">${p.status}</span></td>
+            <td>${p.quantity}</td>
+            <td>₹${Number(p.entry_price).toFixed(2)}</td>
+            <td>${p.exit_price ? '₹' + Number(p.exit_price).toFixed(2) : '—'}</td>
+            <td>₹${Number(p.initial_stop_price).toFixed(2)}</td>
+            <td>₹${Number(p.trailing_activation_price).toFixed(2)}</td>
+            <td>₹${Number(p.highest_price_since_entry).toFixed(2)}</td>
+            <td>${p.trailing_activated ? '<span class="pill ok">ACTIVATED</span>' : '<span class="pill warn">WAITING</span>'}</td>
+            <td style="font-weight:600; color:${Number(p.realized_pnl_inr) >= 0 ? 'var(--green)' : 'var(--red)'};">
+              ${Number(p.realized_pnl_inr) >= 0 ? '+' : ''}₹${Number(p.realized_pnl_inr).toFixed(2)}
+            </td>
+            <td><span class="pill ok">${p.exit_reason || 'IN_POSITION'}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        posTbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--muted);">No open or closed positions recorded yet.</td></tr>';
+      }
+
+      // 3. Orders Table
+      const orderData = await fetchJson('/orders');
+      const ordTbody = document.getElementById('orders-tbody');
+      if (orderData && orderData.orders && orderData.orders.length > 0) {
+        ordTbody.innerHTML = orderData.orders.map(o => `
+          <tr>
+            <td><code>${o.order_id}</code></td>
+            <td style="font-size:0.78rem;">${o.idempotency_key}</td>
+            <td><strong>${o.symbol}</strong></td>
+            <td><span class="pill ${o.side === 'BUY' ? 'ok' : 'warn'}">${o.side}</span></td>
+            <td>${o.requested_qty}</td>
+            <td>${o.filled_qty}</td>
+            <td>₹${Number(o.reference_price).toFixed(2)}</td>
+            <td><span class="pill ${o.status === 'FILLED' ? 'ok' : 'warn'}">${o.status}</span></td>
+            <td>${o.reason || '—'}</td>
+          </tr>
+        `).join('');
+      } else {
+        ordTbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted);">No orders submitted yet.</td></tr>';
+      }
+
+      // 4. Market Status
+      const mkt = await fetchJson('/market/status');
+      if (mkt) {
+        document.getElementById('val-session-state').textContent = mkt.session_state;
+      }
+
+      document.getElementById('sync-status').textContent = 'Last synced at ' + new Date().toLocaleTimeString();
+    }
+
+    // Auto-refresh every 5 seconds
+    setInterval(refreshAllData, 5000);
+    // Initial fetch on load
+    refreshAllData();
   </script>
 </body>
 </html>

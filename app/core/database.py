@@ -522,34 +522,40 @@ class Session:
           col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
       }
 
-    # 2. Process updates for tracked instances in identity map
+    # 2. Process updates for mutable tracked instances in identity map
+    mutable_models = (PositionRecord, OrderRecord, BacktestRunRecord)
     for (model_cls, obj_id), obj in list(self._identity_map.items()):
+      if not issubclass(model_cls, mutable_models):
+        continue
       tbl = obj.__tablename__
       table_schema = self.schema.get(tbl, {})
       snapshot = self._snapshot.get((model_cls, obj_id), {})
 
       dirty = False
-      update_cols: list[str] = []
-      update_vals: list[Any] = []
-
       for col_name in table_schema.keys():
         if col_name == "id":
           continue
-        curr_val = getattr(obj, col_name, None)
-        snap_val = snapshot.get(col_name)
-        if curr_val != snap_val:
+        if getattr(obj, col_name, None) != snapshot.get(col_name):
           dirty = True
-        if hasattr(obj, col_name):
-          update_cols.append(f"[{col_name}] = ?")
-          update_vals.append(_serialize_value(curr_val))
+          break
 
-      if dirty and update_cols:
-        update_vals.append(obj.id)
-        sql = f"UPDATE [{tbl}] SET {', '.join(update_cols)} WHERE [id] = ?"
-        cur.execute(sql, update_vals)
-        self._snapshot[(model_cls, obj_id)] = {
-            col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
-        }
+      if dirty:
+        update_cols: list[str] = []
+        update_vals: list[Any] = []
+        for col_name in table_schema.keys():
+          if col_name == "id":
+            continue
+          if hasattr(obj, col_name):
+            update_cols.append(f"[{col_name}] = ?")
+            update_vals.append(_serialize_value(getattr(obj, col_name, None)))
+
+        if update_cols:
+          update_vals.append(obj.id)
+          sql = f"UPDATE [{tbl}] SET {', '.join(update_cols)} WHERE [id] = ?"
+          cur.execute(sql, update_vals)
+          self._snapshot[(model_cls, obj_id)] = {
+              col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
+          }
 
   def commit(self) -> None:
     self.flush()
