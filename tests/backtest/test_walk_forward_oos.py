@@ -48,3 +48,4 @@ def test_100_trade_out_of_sample_and_slippage_stress_matrix():
     assert summary.net_expectancy_r > Decimal("0.0"), f"Slippage failure under {label}"
     assert summary.net_expectancy_inr > Decimal("0.0"), f"Negative net INR under {label}"
     assert summary.profit_factor > Decimal("1.5"), f"Profit factor collapsed under {label}"
+
