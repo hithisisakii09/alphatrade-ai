@@ -67,12 +67,29 @@ class AppConfig(BaseModel):
   cost_version: str
 
 
+def _load_env_file() -> None:
+  base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+  env_path = os.path.join(base_dir, ".env")
+  if os.path.exists(env_path):
+    with open(env_path, "r", encoding="utf-8") as f:
+      for line in f:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+          continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip().strip("'\"")
+        if k and k not in os.environ:
+          os.environ[k] = v
+
+
 def load_app_config(
     execution_mode: str | None = None,
     risk_profile_name: str | None = None,
     cost_profile_name: str | None = None,
     database_url: str | None = None,
 ) -> AppConfig:
+  _load_env_file()
   mode = assert_paper_mode(execution_mode)
   base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   with open(os.path.join(base_dir, "config/strategy/orb_v2.json"), "r") as f:

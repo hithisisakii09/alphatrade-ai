@@ -7,6 +7,7 @@ import traceback
 
 from tests.unit import test_core_and_indicators as t_core
 from tests.unit import test_risk_and_costs as t_risk
+from tests.unit import test_angel_provider as t_angel
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.backtest import test_backtester_and_lookahead as t_bt
 from tests.safety import test_live_guard_and_edge_cases as t_safe
@@ -39,6 +40,13 @@ def run_all() -> int:
           t_risk.test_exact_legacy_8_20_10_worked_example,
           t_risk.test_v2_intraday_exit_levels_and_pessimistic_intrabar_priority,
           t_risk.test_gap_below_stop_uses_conservative_bar_open,
+      ]),
+      ("unit/test_angel_provider.py", [
+          t_angel.test_rfc6238_totp_generation_test_vectors,
+          t_angel.test_angel_symbol_token_resolution,
+          t_angel.test_angel_response_parsing_to_candle_bars,
+          t_angel.test_angel_auth_error_when_credentials_missing,
+          t_angel.test_get_data_provider_factory,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
