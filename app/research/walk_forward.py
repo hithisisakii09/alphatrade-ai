@@ -94,7 +94,7 @@ def generate_multi_day_dataset(
 
 
 def run_100_trade_out_of_sample_study(
-    db_url: str = "sqlite:///./alphatrade_v2.db",
+    db_url: str = "sqlite:///:memory:",
     symbols: list[str] | None = None,
 ) -> WalkForwardEvaluationResult:
   """Executes a rigorous Chronological In-Sample (70%) vs Out-of-Sample (30%) study generating 100+ OOS trades."""
@@ -111,9 +111,9 @@ def run_100_trade_out_of_sample_study(
   for s, bars in all_bars_by_symbol.items():
     is_bars[s], oos_bars[s] = split_bars_chronologically(bars, is_ratio=0.70)
 
-  # Run each backtest in an isolated DB session so trade records and capital balance don't pollute between runs
+  # Run each backtest in an isolated in-memory DB session so trade records and capital balance don't pollute
   def _run_isolated_bt(bars_dict, label, slip_pct=None):
-    _, sess_maker = init_db(db_url)
+    _, sess_maker = init_db("sqlite:///:memory:")
     with sess_maker() as db:
       bt = EventDrivenBacktester(db, cfg)
       return bt.run_backtest(
