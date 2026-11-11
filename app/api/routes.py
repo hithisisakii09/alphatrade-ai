@@ -225,6 +225,13 @@ def stop_runner():
   return {"status": "STOPPED", "is_running": _daily_runner.is_running}
 
 
+@router.post("/runner/tick")
+def trigger_runner_tick(symbols: str | None = None):
+  sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
+  summary = _daily_runner.job_intraday_tick(symbols=sym_list)
+  return {"status": "SUCCESS", "summary": summary}
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 @router.get("/dashboard/", response_class=HTMLResponse)

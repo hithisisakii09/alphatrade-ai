@@ -130,12 +130,6 @@ class AngelSmartAPIDataProvider:
     )
     if not self.jwt_token:
       self._load_cached_session()
-    self.cache_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        ".cache",
-    )
-    if not self.jwt_token:
-      self._load_cached_session()
 
   def _load_cached_session(self) -> None:
     session_file = os.path.join(self.cache_dir, "angel_session.json")

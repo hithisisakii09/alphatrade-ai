@@ -1,8 +1,9 @@
 """Daily session runner, APScheduler intraday cron manager, and deterministic ORB simulation benchmark."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 import logging
+import os
 from typing import Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -10,17 +11,32 @@ from apscheduler.triggers.cron import CronTrigger
 from app.backtest.engine import EventDrivenBacktester
 from app.core.clock import IST, NSECalendar, ist_datetime, to_ist
 from app.core.config import AppConfig, load_app_config
-from app.core.database import DailyMetricRecord, PositionRecord, Session, init_db
+from app.core.database import (
+    DailyMetricRecord,
+    PositionRecord,
+    RiskDecisionRecord,
+    Session,
+    TradeSignalRecord,
+    init_db,
+)
 from app.core.execution_guard import assert_paper_mode
 from app.core.money import round_paise, to_decimal
+from app.data.instruments import InstrumentRegistry
 from app.data.models import CandleBar
 from app.data.providers import MarketDataProvider, get_data_provider
+from app.data.validator import CandleIngestionValidator, aggregate_1m_to_nm
 from app.execution.costs import NSECostEngine
 from app.execution.paper_broker import PaperBroker
+from app.market.indicators import (
+    compute_opening_range,
+    compute_session_vwap,
+    compute_time_of_day_rvol,
+)
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.reports import generate_daily_report
 from app.risk.engine import RiskEngine
 from app.services.notifications import WebhookNotificationService
+from app.strategy.orb.engine import ORBStrategyEngine
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +143,8 @@ class ScheduledDailyRunner:
       config: AppConfig | None = None,
       database_url: str | None = None,
       auto_start: bool = False,
+      enable_intraday_poll: bool | None = None,
+      symbols_universe: list[str] | None = None,
   ):
     assert_paper_mode()
     self.config = config or load_app_config(database_url=database_url)
@@ -135,8 +153,40 @@ class ScheduledDailyRunner:
     self.calendar = NSECalendar()
     self.provider: MarketDataProvider = get_data_provider(self.config.data_provider)
     self.notification_service = WebhookNotificationService()
+    self.registry = InstrumentRegistry()
+    self.risk_profile = self.config.strategy.risk_profiles[self.config.active_risk_profile]
+    self.cost_profile = self.config.costs[self.config.active_cost_profile]
+    self.cost_engine = NSECostEngine(self.cost_profile)
+    self.risk_engine = RiskEngine(
+        self.risk_profile,
+        self.cost_engine,
+        entry_cutoff_ist=self.config.strategy.entry_cutoff_ist,
+        liquidation_start_ist=self.config.strategy.liquidation_start_ist,
+        liquidation_deadline_ist=self.config.strategy.liquidation_deadline_ist,
+    )
+    self.strategy_engine = ORBStrategyEngine(self.config.strategy, self.registry)
+    self.validator = CandleIngestionValidator()
+    self.symbols_universe: list[str] = symbols_universe or [
+        "RELIANCE",
+        "TCS",
+        "INFY",
+        "HDFCBANK",
+        "ICICIBANK",
+        "SBIN",
+        "BHARTIARTL",
+        "ITC",
+        "LT",
+        "AXISBANK",
+    ]
+    self.prev_daily_closes: dict[str, Decimal] = {}
     self.scheduler = BackgroundScheduler(timezone=IST)
     self._is_active = False
+
+    if enable_intraday_poll is not None:
+      self.enable_intraday_poll = enable_intraday_poll
+    else:
+      self.enable_intraday_poll = os.environ.get("ALPHATRADE_ENABLE_INTRADAY_POLLER", "").lower() in ("true", "1")
+
     self._register_jobs()
     if auto_start:
       self.start()
@@ -191,6 +241,22 @@ class ScheduledDailyRunner:
         replace_existing=True,
     )
 
+    if self.enable_intraday_poll:
+      self.enable_intraday_tick_job()
+
+  def enable_intraday_tick_job(self) -> None:
+    self.scheduler.add_job(
+        self.job_intraday_tick,
+        CronTrigger(day_of_week="mon-fri", hour="9-14", minute="*", timezone=IST),
+        id="nse_intraday_tick",
+        name="Live Market 1-Minute Candle Ingestion & ORB Breakout Evaluation",
+        replace_existing=True,
+    )
+
+  def disable_intraday_tick_job(self) -> None:
+    if self.scheduler.get_job("nse_intraday_tick"):
+      self.scheduler.remove_job("nse_intraday_tick")
+
   def start(self) -> None:
     if not self.scheduler.running:
       self.scheduler.start()
@@ -230,23 +296,347 @@ class ScheduledDailyRunner:
 
   def job_market_open(self, now_utc: datetime | None = None) -> str:
     ts = now_utc or datetime.now(timezone.utc)
+    self.risk_engine.reset_kill_switch()
+    with self.SessionLocal() as db:
+      ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
+      broker = PaperBroker(db, ledger, self.cost_engine, self.risk_engine)
+      broker.recover_state_after_restart()
     return f"Market open & live candle ingestion initiated at {ts.isoformat()}"
 
   def job_opening_range_formed(self, now_utc: datetime | None = None) -> str:
     ts = now_utc or datetime.now(timezone.utc)
     return f"ORB formed at {ts.isoformat()}"
 
-  def job_intraday_tick(self, now_utc: datetime | None = None) -> str:
-    ts = now_utc or datetime.now(timezone.utc)
-    return f"Intraday tick processed at {ts.isoformat()}"
-
   def job_entry_cutoff(self, now_utc: datetime | None = None) -> str:
     ts = now_utc or datetime.now(timezone.utc)
     return f"Entry cutoff enforced at {ts.isoformat()}"
 
-  def job_eod_liquidation(self, now_utc: datetime | None = None) -> str:
+  def job_eod_liquidation(self, now_utc: datetime | None = None) -> dict[str, Any]:
     ts = now_utc or datetime.now(timezone.utc)
-    return f"EOD forced liquidation executed at {ts.isoformat()}"
+    dt_ist = to_ist(ts)
+    session_date = dt_ist.strftime("%Y-%m-%d")
+    closed: list[dict[str, str]] = []
+
+    with self.SessionLocal() as db:
+      ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
+      broker = PaperBroker(
+          db, ledger, self.cost_engine, self.risk_engine, notification_service=self.notification_service
+      )
+      broker.recover_state_after_restart()
+      open_positions = ledger.get_open_positions()
+
+      for pos in open_positions:
+        ref_price = to_decimal(pos.current_stop_price or pos.entry_price)
+        order, _ = broker.submit_order(
+            idempotency_key=f"EOD_LIQ_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+            symbol=pos.symbol,
+            session_date=session_date,
+            side="SELL",
+            quantity=pos.quantity,
+            reference_price=ref_price,
+            timestamp_utc=ts,
+        )
+        order.reason = "EOD_FORCED_LIQUIDATION"
+        fill = broker.execute_fill_on_bar(
+            order,
+            bar_open_price=ref_price,
+            timestamp_utc=ts,
+        )
+        if fill:
+          closed.append({
+              "symbol": pos.symbol,
+              "exit_price": str(fill.fill_price),
+              "reason": "EOD_FORCED_LIQUIDATION",
+          })
+          if self.notification_service.is_configured:
+            try:
+              msg = self.notification_service.format_position_exit_message(
+                  symbol=pos.symbol,
+                  entry_price=to_decimal(pos.entry_price),
+                  exit_price=to_decimal(pos.exit_price),
+                  quantity=pos.quantity,
+                  net_pnl_inr=to_decimal(pos.realized_pnl_inr),
+                  exit_reason="EOD_FORCED_LIQUIDATION",
+              )
+              self.notification_service.send_message_sync(msg)
+            except Exception as ne:
+              logger.warning(f"Failed to dispatch liquidation alert: {ne}")
+
+    return {
+        "status": "LIQUIDATION_COMPLETE",
+        "positions_closed": closed,
+        "timestamp_ist": dt_ist.isoformat(),
+    }
+
+  def job_intraday_tick(
+      self,
+      now_utc: datetime | None = None,
+      custom_bars_by_symbol: dict[str, list[CandleBar]] | None = None,
+      symbols: list[str] | None = None,
+  ) -> dict[str, Any]:
+    """Live 1m candle ingestion, validation, ORB calculation, breakout execution, and trailing stop management."""
+    ts = now_utc or datetime.now(timezone.utc)
+    dt_ist = to_ist(ts)
+    session_date = dt_ist.strftime("%Y-%m-%d")
+
+    # Calendar check (skip if holiday unless custom bars provided for testing)
+    if custom_bars_by_symbol is None and not self.calendar.is_trading_day(ts):
+      return {
+          "status": "SKIPPED_NON_TRADING_DAY",
+          "session_date": session_date,
+          "timestamp_ist": dt_ist.isoformat(),
+      }
+
+    # Market hours check (09:15 - 15:30 IST)
+    ist_time = dt_ist.time()
+    if custom_bars_by_symbol is None and (ist_time < time(9, 15) or ist_time >= time(15, 30)):
+      return {
+          "status": "MARKET_CLOSED",
+          "session_date": session_date,
+          "timestamp_ist": dt_ist.isoformat(),
+      }
+
+    # 15:00 IST Forced EOD Liquidation Check
+    eod_time = datetime.strptime(self.config.strategy.liquidation_start_ist, "%H:%M").time()
+    if ist_time >= eod_time:
+      liq_res = self.job_eod_liquidation(ts)
+      return {
+          "status": "EOD_LIQUIDATION_WINDOW",
+          "session_date": session_date,
+          "timestamp_ist": dt_ist.isoformat(),
+          "liquidation_result": liq_res,
+      }
+
+    summary: dict[str, Any] = {
+        "status": "SUCCESS",
+        "session_date": session_date,
+        "timestamp_ist": dt_ist.isoformat(),
+        "symbols_evaluated": 0,
+        "signals_generated": [],
+        "orders_placed": [],
+        "orders_filled": [],
+        "positions_closed": [],
+        "open_positions_count": 0,
+        "errors": [],
+    }
+
+    entry_cutoff = datetime.strptime(self.config.strategy.entry_cutoff_ist, "%H:%M").time()
+    target_symbols = symbols or (list(custom_bars_by_symbol.keys()) if custom_bars_by_symbol else self.symbols_universe)
+
+    with self.SessionLocal() as db:
+      ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
+      broker = PaperBroker(
+          db, ledger, self.cost_engine, self.risk_engine, notification_service=self.notification_service
+      )
+      broker.recover_state_after_restart()
+
+      for sym in target_symbols:
+        try:
+          # 1. Ingest 1m candles
+          if custom_bars_by_symbol and sym in custom_bars_by_symbol:
+            bars = custom_bars_by_symbol[sym]
+          else:
+            start_utc = ist_datetime(dt_ist.year, dt_ist.month, dt_ist.day, 9, 15)
+            bars = self.provider.fetch_1m_candles(sym, start_utc, ts)
+
+          if not bars:
+            continue
+
+          # 2. Validate bars
+          valid_bars: list[CandleBar] = []
+          for b in bars:
+            v_ok, _ = self.validator.validate_bar(b)
+            if v_ok and sym not in self.validator.quarantined_symbols:
+              valid_bars.append(b)
+
+          if not valid_bars:
+            continue
+
+          summary["symbols_evaluated"] += 1
+          latest_bar = valid_bars[-1]
+          prev_close = self.prev_daily_closes.get(sym, valid_bars[0].open)
+          lower_circuit, upper_circuit = self.registry.compute_price_bands(sym, prev_close)
+
+          # 3. Position Management on Latest 1m Bar (trailing stops / stop-loss)
+          open_pos = ledger.get_open_position_by_symbol(sym)
+          if open_pos is not None:
+            eval_res = self.risk_engine.evaluate_position_bar_1m(
+                bar_open=latest_bar.open,
+                bar_high=latest_bar.high,
+                bar_low=latest_bar.low,
+                bar_close=latest_bar.close,
+                bar_timestamp_utc=latest_bar.timestamp_utc,
+                initial_stop_price=to_decimal(open_pos.initial_stop_price),
+                trailing_activation_price=to_decimal(open_pos.trailing_activation_price),
+                trailing_drop_pct=to_decimal(open_pos.trailing_drop_pct),
+                trailing_activated=bool(open_pos.trailing_activated),
+                highest_price_since_entry=to_decimal(open_pos.highest_price_since_entry),
+            )
+            # Update trailing stop state
+            if (
+                open_pos.trailing_activated != eval_res.trailing_activated
+                or open_pos.highest_price_since_entry != eval_res.highest_price_since_entry
+                or open_pos.current_stop_price != eval_res.current_stop_price
+            ):
+              open_pos.trailing_activated = eval_res.trailing_activated
+              open_pos.highest_price_since_entry = eval_res.highest_price_since_entry
+              open_pos.current_stop_price = eval_res.current_stop_price
+              db.flush()
+
+            # Execute exit if stop triggered
+            if eval_res.should_exit and eval_res.trigger_price is not None:
+              exit_order, _ = broker.submit_order(
+                  idempotency_key=f"LIVE_EXIT_{open_pos.position_id}_{latest_bar.timestamp_utc.strftime('%H%M%S')}",
+                  symbol=sym,
+                  session_date=session_date,
+                  side="SELL",
+                  quantity=open_pos.quantity,
+                  reference_price=eval_res.trigger_price,
+                  timestamp_utc=latest_bar.timestamp_utc,
+              )
+              exit_order.reason = eval_res.exit_reason
+              sell_fill = broker.execute_fill_on_bar(
+                  exit_order,
+                  bar_open_price=eval_res.trigger_price,
+                  timestamp_utc=latest_bar.timestamp_utc,
+                  upper_circuit=upper_circuit,
+                  lower_circuit=lower_circuit,
+              )
+              if sell_fill:
+                summary["positions_closed"].append({
+                    "symbol": sym,
+                    "reason": eval_res.exit_reason,
+                    "exit_price": str(sell_fill.fill_price),
+                })
+              continue
+
+          # 4. Opening Range Formation (09:15 - 09:30 IST)
+          orb_state = compute_opening_range(valid_bars, self.config.strategy.opening_range_minutes)
+          if not orb_state.is_complete:
+            continue
+
+          # 5. Breakout Signal & Entry Evaluation (09:30 to 14:30 IST)
+          if ist_time < entry_cutoff and open_pos is None:
+            bars_5m = aggregate_1m_to_nm(valid_bars, 5)
+            if not bars_5m:
+              continue
+            latest_5m = bars_5m[-1]
+            vwap = compute_session_vwap(valid_bars)
+            cum_vol = sum(b.volume for b in valid_bars)
+            rvol = compute_time_of_day_rvol(cum_vol, [max(1, cum_vol // 2)])
+
+            sig_eval = self.strategy_engine.evaluate_5m_bar(
+                bar_5m=latest_5m,
+                orb_state=orb_state,
+                vwap=vwap,
+                rvol=rvol,
+                estimated_spread_pct=Decimal("0.0005"),
+                prev_daily_close=prev_close,
+                nifty_strongly_bearish=False,
+            )
+
+            if sig_eval.triggered and sig_eval.signal_id:
+              # Check idempotency in DB
+              existing_sig = db.query(TradeSignalRecord).filter_by(signal_id=sig_eval.signal_id).first()
+              if existing_sig is None:
+                trade_sig = TradeSignalRecord(
+                    signal_id=sig_eval.signal_id,
+                    symbol=sym,
+                    session_date=session_date,
+                    timestamp_utc=latest_bar.timestamp_utc,
+                    direction="LONG",
+                    signal_price=sig_eval.signal_price,
+                    orb_high=sig_eval.orb_high,
+                    orb_low=sig_eval.orb_low,
+                    vwap=sig_eval.vwap,
+                    rvol=sig_eval.rvol,
+                    status="PROPOSED",
+                    explanation=sig_eval.explanation,
+                )
+                db.add(trade_sig)
+                db.flush()
+
+                summary["signals_generated"].append({
+                    "signal_id": sig_eval.signal_id,
+                    "symbol": sym,
+                    "price": str(sig_eval.signal_price),
+                    "orb_high": str(sig_eval.orb_high),
+                })
+
+                # Risk Engine Evaluation
+                open_syms = {p.symbol for p in ledger.get_open_positions()}
+                risk_dec = self.risk_engine.evaluate_entry_signal(
+                    symbol=sym,
+                    session_date=session_date,
+                    signal_timestamp_utc=latest_bar.timestamp_utc,
+                    candidate_entry_price=sig_eval.signal_price,
+                    orb_low=orb_state.orb_low,
+                    current_capital_inr=self.risk_profile.reference_capital,
+                    available_cash_inr=ledger.get_cash_balance(),
+                    deployed_exposure_inr=ledger.get_deployed_exposure(),
+                    open_positions_Symbols=open_syms,
+                    daily_realized_pnl_inr=ledger.get_daily_realized_pnl(session_date),
+                    daily_unrealized_pnl_inr=ledger.get_daily_unrealized_pnl(),
+                )
+
+                risk_rec = RiskDecisionRecord(
+                    signal_id=sig_eval.signal_id,
+                    symbol=sym,
+                    timestamp_utc=latest_bar.timestamp_utc,
+                    approved=risk_dec.approved,
+                    reason_code=risk_dec.reason_code,
+                    approved_quantity=risk_dec.approved_quantity,
+                    risk_budget_inr=risk_dec.risk_budget_inr,
+                    cost_to_risk_ratio=risk_dec.cost_to_risk_ratio,
+                    explanation=risk_dec.explanation,
+                )
+                db.add(risk_rec)
+                db.flush()
+
+                if risk_dec.approved and risk_dec.approved_quantity >= 1:
+                  trade_sig.status = "APPROVED"
+                  order, _ = broker.submit_order(
+                      idempotency_key=f"LIVE_ENTRY_{sig_eval.signal_id}",
+                      symbol=sym,
+                      session_date=session_date,
+                      side="BUY",
+                      quantity=risk_dec.approved_quantity,
+                      reference_price=latest_bar.close,
+                      timestamp_utc=latest_bar.timestamp_utc,
+                      signal_id=sig_eval.signal_id,
+                  )
+                  summary["orders_placed"].append({
+                      "order_id": order.order_id,
+                      "symbol": sym,
+                      "qty": order.requested_qty,
+                  })
+
+                  fill = broker.execute_fill_on_bar(
+                      order,
+                      bar_open_price=latest_bar.close,
+                      timestamp_utc=latest_bar.timestamp_utc,
+                      orb_low=orb_state.orb_low,
+                      upper_circuit=upper_circuit,
+                      lower_circuit=lower_circuit,
+                  )
+                  if fill:
+                    trade_sig.status = "EXECUTED"
+                    summary["orders_filled"].append({
+                        "order_id": order.order_id,
+                        "fill_id": fill.fill_id,
+                        "symbol": sym,
+                        "fill_price": str(fill.fill_price),
+                    })
+                else:
+                  trade_sig.status = f"REJECTED_{risk_dec.reason_code}"
+                db.commit()
+
+        except Exception as sym_err:
+          logger.warning(f"Error evaluating live tick for {sym}: {sym_err}")
+          summary["errors"].append({"symbol": sym, "error": str(sym_err)})
+
+      summary["open_positions_count"] = len(ledger.get_open_positions())
+      return summary
 
   def job_reconcile_and_report(self, now_utc: datetime | None = None) -> dict[str, Any]:
     ts = now_utc or datetime.now(timezone.utc)

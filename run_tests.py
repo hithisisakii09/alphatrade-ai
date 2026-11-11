@@ -64,6 +64,7 @@ def run_all() -> int:
       ("integration/test_daily_runner.py", [
           t_runner.test_scheduled_daily_runner_jobs_and_lifecycle,
           t_runner.test_runner_status_fastapi_endpoint,
+          lambda: t_runner.test_intraday_tick_breakout_execution_and_eod_liquidation(Path(tempfile.mkdtemp())),
       ]),
       ("backtest/test_backtester_and_lookahead.py", [
           t_bt.test_deliberate_lookahead_bug_caught,

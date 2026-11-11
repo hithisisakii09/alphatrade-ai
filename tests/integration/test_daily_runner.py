@@ -1,9 +1,11 @@
 """Integration tests for ScheduledDailyRunner APScheduler jobs and runner API endpoint."""
 
+from decimal import Decimal
 from fastapi.testclient import TestClient
 
+from app.core.clock import ist_datetime
 from app.main import app
-from app.services.daily_runner import ScheduledDailyRunner
+from app.services.daily_runner import ScheduledDailyRunner, generate_realistic_session_bars
 
 
 def test_scheduled_daily_runner_jobs_and_lifecycle():
@@ -23,6 +25,13 @@ def test_scheduled_daily_runner_jobs_and_lifecycle():
   assert "is_trading_day" in res
   assert "session_state" in res
 
+  # Test dynamic enabling/disabling of 1-minute intraday tick job
+  runner.enable_intraday_tick_job()
+  assert len(runner.get_jobs_summary()) == 7
+  assert "nse_intraday_tick" in {j["id"] for j in runner.get_jobs_summary()}
+  runner.disable_intraday_tick_job()
+  assert len(runner.get_jobs_summary()) == 6
+
   # Test lifecycle start/stop
   runner.start()
   assert runner.is_running is True
@@ -30,7 +39,8 @@ def test_scheduled_daily_runner_jobs_and_lifecycle():
   assert runner.is_running is False
 
 
-def test_runner_status_fastapi_endpoint():
+def test_runner_status_fastapi_endpoint(monkeypatch=None):
+  from unittest.mock import patch
   client = TestClient(app)
   resp = client.get("/runner/status")
   assert resp.status_code == 200
@@ -38,4 +48,39 @@ def test_runner_status_fastapi_endpoint():
   assert "is_running" in data
   assert data["jobs_count"] == 6
   assert len(data["jobs"]) == 6
+
+  # Test trigger tick endpoint (mock tick to avoid live network delay during test run)
+  with patch("app.api.routes._daily_runner.job_intraday_tick", return_value={"status": "SUCCESS", "mock": True}):
+    tick_resp = client.post("/runner/tick")
+    assert tick_resp.status_code == 200
+    assert tick_resp.json()["status"] == "SUCCESS"
+
+
+def test_intraday_tick_breakout_execution_and_eod_liquidation(tmp_path=None):
+  import tempfile
+  from pathlib import Path
+  folder = tmp_path or Path(tempfile.mkdtemp())
+  test_db = f"sqlite:///{folder}/test_live_runner.db"
+  runner = ScheduledDailyRunner(database_url=test_db)
+
+  # Generate 35 minutes of 1m bars for RELIANCE (09:15 to 09:49 IST)
+  # Bars 0-14 form ORB; bars 15-19 breakout above ORH with volume
+  bars = generate_realistic_session_bars("RELIANCE", 2026, 11, 10, Decimal("1250.00"))[:35]
+  eval_time = ist_datetime(2026, 11, 10, 9, 49)
+
+  summary = runner.job_intraday_tick(now_utc=eval_time, custom_bars_by_symbol={"RELIANCE": bars})
+  assert summary["status"] == "SUCCESS"
+  assert summary["symbols_evaluated"] == 1
+  assert len(summary["signals_generated"]) == 1
+  assert summary["signals_generated"][0]["symbol"] == "RELIANCE"
+  assert len(summary["orders_placed"]) == 1
+  assert len(summary["orders_filled"]) == 1
+  assert summary["open_positions_count"] == 1
+
+  # Test forced EOD liquidation window at 15:00 IST
+  liq_time = ist_datetime(2026, 11, 10, 15, 0)
+  liq_summary = runner.job_intraday_tick(now_utc=liq_time, custom_bars_by_symbol={"RELIANCE": bars})
+  assert liq_summary["status"] == "EOD_LIQUIDATION_WINDOW"
+  assert len(liq_summary["liquidation_result"]["positions_closed"]) == 1
+  assert liq_summary["liquidation_result"]["positions_closed"][0]["symbol"] == "RELIANCE"
 
