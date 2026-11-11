@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.backtest.engine import EventDrivenBacktester
 from app.core.clock import to_ist
 from app.core.config import _load_env_file, load_app_config
-from app.core.database import BacktestTradeRecord, MarketCandleRecord, Session, init_db
+from app.core.database import BacktestRunRecord, BacktestTradeRecord, MarketCandleRecord, Session, init_db
 from app.core.execution_guard import assert_paper_mode
 from app.data.models import CandleBar
 
@@ -77,19 +77,33 @@ def run_backtest_from_db(
       return
 
     print("\n[*] Executing chronological simulation with pessimistic intrabar stops...")
-    bt = EventDrivenBacktester(db, cfg)
-    summary = bt.run_backtest(
-        bars_1m_by_symbol=bars_by_symbol,
-        prev_closes_by_symbol=prev_closes,
-        dataset_id=dataset_id,
-    )
+    _, BacktestSession = init_db("sqlite:///:memory:")
+    with BacktestSession() as bt_db:
+      bt = EventDrivenBacktester(bt_db, cfg)
+      summary = bt.run_backtest(
+          bars_1m_by_symbol=bars_by_symbol,
+          prev_closes_by_symbol=prev_closes,
+          dataset_id=dataset_id,
+      )
 
-    # Fetch recorded trades
-    trades = (
-        db.query(BacktestTradeRecord)
-        .filter(BacktestTradeRecord.run_id == summary.run_id)
-        .all()
-    )
+      # Fetch recorded trades from isolated backtest db
+      trades = (
+          bt_db.query(BacktestTradeRecord)
+          .filter(BacktestTradeRecord.run_id == summary.run_id)
+          .all()
+      )
+
+      # Persist run and trades to main database for historical tracking
+      run_rec = (
+          bt_db.query(BacktestRunRecord)
+          .filter(BacktestRunRecord.run_id == summary.run_id)
+          .first()
+      )
+      if run_rec:
+        db.add(BacktestRunRecord(**{k: v for k, v in run_rec.__dict__.items() if k != "id"}))
+      for t in trades:
+        db.add(BacktestTradeRecord(**{k: v for k, v in t.__dict__.items() if k != "id"}))
+      db.commit()
 
     print("\n=================================================================")
     print(f"BACKTEST PERFORMANCE REPORT (Run ID: {summary.run_id})")
@@ -133,3 +147,4 @@ def main():
 
 if __name__ == "__main__":
   main()
+

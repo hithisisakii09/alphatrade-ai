@@ -80,7 +80,17 @@ def download_historical_candles(
             continue
 
           saved_count = 0
+          existing_rows = db.conn.cursor().execute(
+              "SELECT timestamp_utc FROM market_candles WHERE symbol = ? AND interval_minutes = 1",
+              (sym,),
+          ).fetchall()
+          existing_timestamps = {r[0] for r in existing_rows}
+
           for b in bars:
+            iso_ts = b.timestamp_utc.isoformat()
+            if iso_ts in existing_timestamps:
+              continue
+
             valid, reason = validator.validate_bar(b)
             if not valid:
               continue
@@ -98,11 +108,12 @@ def download_historical_candles(
                 source=b.source,
             )
             db.add(rec)
+            existing_timestamps.add(iso_ts)
             saved_count += 1
 
           db.commit()
           results[sym] += saved_count
-          print(f"    • {sym:12s}: {saved_count:3d} 1m bars validated & stored in DB")
+          print(f"    • {sym:12s}: {saved_count:3d} new 1m bars validated & stored in DB (total fetched: {len(bars)})")
         except Exception as e:
           print(f"    • {sym:12s}: Ingestion error - {e}")
 

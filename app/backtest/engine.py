@@ -183,7 +183,7 @@ class EventDrivenBacktester:
 
           if eval_res.should_exit and eval_res.trigger_price is not None:
             exit_order, _ = self.broker.submit_order(
-                idempotency_key=f"EXIT_{open_pos.position_id}_{bar.timestamp_utc.isoformat()}",
+                idempotency_key=f"BT_{run_id}_EXIT_{open_pos.position_id}_{bar.timestamp_utc.isoformat()}",
                 symbol=sym,
                 session_date=s_date,
                 side="SELL",
@@ -286,7 +286,7 @@ class EventDrivenBacktester:
             )
             if risk_dec.approved and risk_dec.approved_quantity >= 1:
               order, _ = self.broker.submit_order(
-                  idempotency_key=f"ENTRY_{sig_eval.signal_id}",
+                  idempotency_key=f"BT_{run_id}_ENTRY_{sig_eval.signal_id}",
                   symbol=sym,
                   session_date=s_date,
                   side="BUY",
