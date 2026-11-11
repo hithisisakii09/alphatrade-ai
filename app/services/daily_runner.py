@@ -150,20 +150,20 @@ class ScheduledDailyRunner:
         name="Pre-Market Calendar Verification",
         replace_existing=True,
     )
-    # 2. 09:30 IST: Opening Range formation completion
+    # 2. 09:15 IST: Market open & live candle ingestion initiation
+    self.scheduler.add_job(
+        self.job_market_open,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=15, timezone=IST),
+        id="nse_market_open_0915",
+        name="Market Open & Live Ingestion Initiation",
+        replace_existing=True,
+    )
+    # 3. 09:30 IST: Opening Range formation completion
     self.scheduler.add_job(
         self.job_opening_range_formed,
         CronTrigger(day_of_week="mon-fri", hour=9, minute=30, timezone=IST),
         id="nse_orb_formed_0930",
         name="Opening Range High/Low Formation",
-        replace_existing=True,
-    )
-    # 3. 09:31 - 14:29 IST: Intraday 1-minute bar tick & 5-minute signal evaluation
-    self.scheduler.add_job(
-        self.job_intraday_tick,
-        CronTrigger(day_of_week="mon-fri", hour="9-14", minute="*", timezone=IST),
-        id="nse_intraday_tick",
-        name="1-Minute Intraday Tick & 5-Minute Breakout Evaluation",
         replace_existing=True,
     )
     # 4. 14:30 IST: Entry cutoff gate
@@ -182,11 +182,11 @@ class ScheduledDailyRunner:
         name="Forced EOD Position Liquidation",
         replace_existing=True,
     )
-    # 6. 15:30 IST: Daily ledger reconciliation and reporting
+    # 6. 15:35 IST: Daily ledger reconciliation and reporting
     self.scheduler.add_job(
         self.job_reconcile_and_report,
-        CronTrigger(day_of_week="mon-fri", hour=15, minute=30, timezone=IST),
-        id="nse_session_close_1530",
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=35, timezone=IST),
+        id="nse_session_close_1535",
         name="Session Close, Reconciliation & Daily Metric Snapshot",
         replace_existing=True,
     )
@@ -227,6 +227,10 @@ class ScheduledDailyRunner:
         "is_trading_day": is_trading_day,
         "session_state": session_state,
     }
+
+  def job_market_open(self, now_utc: datetime | None = None) -> str:
+    ts = now_utc or datetime.now(timezone.utc)
+    return f"Market open & live candle ingestion initiated at {ts.isoformat()}"
 
   def job_opening_range_formed(self, now_utc: datetime | None = None) -> str:
     ts = now_utc or datetime.now(timezone.utc)

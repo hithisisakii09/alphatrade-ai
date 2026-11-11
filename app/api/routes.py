@@ -24,7 +24,7 @@ router = APIRouter()
 _cfg = load_app_config()
 _engine, _SessionLocal = init_db(_cfg.database_url)
 _calendar = NSECalendar()
-_daily_runner = ScheduledDailyRunner(config=_cfg)
+_daily_runner = ScheduledDailyRunner(config=_cfg, auto_start=True)
 
 
 @router.get("/health")
@@ -213,7 +213,21 @@ def get_runner_status():
   }
 
 
+@router.post("/runner/start")
+def start_runner():
+  _daily_runner.start()
+  return {"status": "STARTED", "is_running": _daily_runner.is_running}
+
+
+@router.post("/runner/stop")
+def stop_runner():
+  _daily_runner.stop()
+  return {"status": "STOPPED", "is_running": _daily_runner.is_running}
+
+
 @router.get("/", response_class=HTMLResponse)
+@router.get("/dashboard", response_class=HTMLResponse)
+@router.get("/dashboard/", response_class=HTMLResponse)
 def get_dashboard_html():
   base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   dash_path = os.path.join(base, "dashboard/index.html")

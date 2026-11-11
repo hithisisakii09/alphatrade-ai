@@ -12,11 +12,11 @@ def test_scheduled_daily_runner_jobs_and_lifecycle():
   assert len(jobs) == 6
   job_ids = {j["id"] for j in jobs}
   assert "nse_pre_market_0900" in job_ids
+  assert "nse_market_open_0915" in job_ids
   assert "nse_orb_formed_0930" in job_ids
-  assert "nse_intraday_tick" in job_ids
   assert "nse_entry_cutoff_1430" in job_ids
   assert "nse_eod_liquidation_1500" in job_ids
-  assert "nse_session_close_1530" in job_ids
+  assert "nse_session_close_1535" in job_ids
 
   # Test pre-market check execution
   res = runner.job_pre_market_check()
