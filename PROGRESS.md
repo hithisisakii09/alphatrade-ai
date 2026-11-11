@@ -73,6 +73,9 @@
   - Created unified operational pre-flight health audit script in `scripts/audit_system_health.py` validating 8/8 subsystems.
   - Added standalone webhook notification test harness in `scripts/test_webhook_alert.py`.
   - Added interactive manual evaluation tick button (`⚡ Run 1m Market Tick`) and 20-token master view to live HTML dashboard.
+  - Added multi-day historical 1m candle ingestion tool (`scripts/download_historical_candles.py`) with idempotent timestamp lookups, populating **5,923 real 1m candles** across 13 NIFTY 100 constituents into SQLite.
+  - Built event-driven backtesting CLI (`scripts/run_live_backtest.py`) with isolated in-memory simulation sessions and automated persistence of run summaries and trade logs into SQLite.
+  - Added interactive **Tab 6: Backtest & Walk-Forward Research** to live HTML dashboard (`http://127.0.0.1:8000/dashboard/`) featuring live candle breakdown, historical simulation performance matrix, interactive trade logs, and browser-triggered simulation (`POST /backtest/run`).
 
 ---
 
