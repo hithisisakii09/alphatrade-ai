@@ -62,6 +62,7 @@ def run_all() -> int:
           t_notify.test_notification_service_configuration,
           t_notify.test_message_formatting_integrity,
           t_notify.test_send_message_sync_mocked,
+          t_notify.test_send_message_background_returns_immediately,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
@@ -71,6 +72,7 @@ def run_all() -> int:
           t_runner.test_scheduled_daily_runner_jobs_and_lifecycle,
           t_runner.test_runner_status_fastapi_endpoint,
           lambda: t_runner.test_intraday_tick_breakout_execution_and_eod_liquidation(Path(tempfile.mkdtemp())),
+          lambda: t_runner.test_tick_latency_profiling_and_telemetry_summary(Path(tempfile.mkdtemp())),
       ]),
       ("backtest/test_backtester_and_lookahead.py", [
           t_bt.test_deliberate_lookahead_bug_caught,

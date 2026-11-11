@@ -84,3 +84,31 @@ def test_intraday_tick_breakout_execution_and_eod_liquidation(tmp_path=None):
   assert len(liq_summary["liquidation_result"]["positions_closed"]) == 1
   assert liq_summary["liquidation_result"]["positions_closed"][0]["symbol"] == "RELIANCE"
 
+
+def test_tick_latency_profiling_and_telemetry_summary(tmp_path=None):
+  import tempfile
+  from pathlib import Path
+  folder = tmp_path or Path(tempfile.mkdtemp())
+  test_db = f"sqlite:///{folder}/test_telemetry.db"
+  runner = ScheduledDailyRunner(database_url=test_db)
+
+  bars = generate_realistic_session_bars("RELIANCE", 2026, 11, 10, Decimal("1250.00"))[:35]
+  eval_time = ist_datetime(2026, 11, 10, 9, 49)
+
+  # Run tick and verify latency profiling metrics
+  summary = runner.job_intraday_tick(now_utc=eval_time, custom_bars_by_symbol={"RELIANCE": bars})
+  assert summary["status"] == "SUCCESS"
+  assert "latency_ms" in summary
+  assert summary["latency_ms"] > 0.0
+  assert summary["latency_budget_exceeded"] is False
+
+  # Verify rolling telemetry summary
+  telemetry = runner.get_telemetry_summary()
+  assert telemetry["total_ticks_executed"] == 1
+  assert telemetry["recent_ticks_tracked"] == 1
+  assert telemetry["avg_latency_ms"] > 0.0
+  assert telemetry["max_latency_ms"] > 0.0
+  assert telemetry["latency_budget_ms"] == 500.0
+  assert telemetry["budget_compliant"] is True
+  assert len(telemetry["recent_latencies"]) == 1
+

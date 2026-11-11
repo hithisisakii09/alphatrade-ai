@@ -6,6 +6,7 @@ from decimal import Decimal
 import json
 import logging
 import os
+import threading
 from typing import Any
 import httpx
 
@@ -140,7 +141,7 @@ class WebhookNotificationService:
         f"• **Accounting:** Double-entry ledger balanced & reconciled against SQLite.\n"
     )
 
-  def send_message_sync(self, content: str) -> dict[str, bool]:
+  def send_message_sync(self, content: str, timeout: float = 3.0) -> dict[str, bool]:
     """Synchronously sends message to configured webhooks without raising exceptions."""
     results = {"discord": False, "telegram": False}
     if not self.is_configured:
@@ -149,7 +150,7 @@ class WebhookNotificationService:
     # 1. Dispatch to Discord
     if self.discord_webhook_url and self.discord_webhook_url.startswith("http"):
       try:
-        with httpx.Client(timeout=6.0) as client:
+        with httpx.Client(timeout=timeout) as client:
           resp = client.post(self.discord_webhook_url, json={"content": content})
           results["discord"] = (200 <= resp.status_code < 300)
       except Exception as e:
@@ -164,13 +165,19 @@ class WebhookNotificationService:
             "text": content,
             "parse_mode": "Markdown",
         }
-        with httpx.Client(timeout=6.0) as client:
+        with httpx.Client(timeout=timeout) as client:
           resp = client.post(url, json=payload)
           results["telegram"] = (200 <= resp.status_code < 300)
       except Exception as e:
         logger.warning(f"Failed to dispatch Telegram notification: {e}")
 
     return results
+
+  def send_message_background(self, content: str) -> None:
+    """Dispatches webhook alert in a background daemon thread, returning immediately (< 1ms)."""
+    if not self.is_configured:
+      return
+    threading.Thread(target=self.send_message_sync, args=(content,), daemon=True).start()
 
   async def send_message_async(self, content: str) -> dict[str, bool]:
     """Asynchronously dispatches message to Discord and Telegram without blocking."""

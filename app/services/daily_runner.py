@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 import logging
 import os
+import time as timemod
 from typing import Any
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -183,6 +184,8 @@ class ScheduledDailyRunner:
     self.candle_cache = LiveCandleCache(orb_minutes=self.config.strategy.opening_range_minutes)
     self.scheduler = BackgroundScheduler(timezone=IST)
     self._is_active = False
+    self.recent_tick_latencies: list[dict[str, Any]] = []
+    self.total_ticks_executed: int = 0
 
     if enable_intraday_poll is not None:
       self.enable_intraday_poll = enable_intraday_poll
@@ -286,6 +289,24 @@ class ScheduledDailyRunner:
         for j in self.scheduler.get_jobs()
     ]
 
+  def get_telemetry_summary(self) -> dict[str, Any]:
+    """Returns rolling latency distribution and execution telemetry."""
+    latencies = [x["latency_ms"] for x in self.recent_tick_latencies]
+    avg_lat = round(sum(latencies) / len(latencies), 2) if latencies else 0.0
+    max_lat = max(latencies) if latencies else 0.0
+    p95_idx = int(len(latencies) * 0.95)
+    p95_lat = round(sorted(latencies)[p95_idx], 2) if latencies else 0.0
+    return {
+        "total_ticks_executed": self.total_ticks_executed,
+        "recent_ticks_tracked": len(latencies),
+        "avg_latency_ms": avg_lat,
+        "max_latency_ms": max_lat,
+        "p95_latency_ms": p95_lat,
+        "latency_budget_ms": 500.0,
+        "budget_compliant": max_lat <= 500.0 if latencies else True,
+        "recent_latencies": self.recent_tick_latencies[-10:],
+    }
+
   def job_pre_market_check(self, now_utc: datetime | None = None) -> dict[str, Any]:
     ts = now_utc or datetime.now(timezone.utc)
     is_trading_day = self.calendar.is_trading_day(ts)
@@ -377,6 +398,7 @@ class ScheduledDailyRunner:
       symbols: list[str] | None = None,
   ) -> dict[str, Any]:
     """Live 1m candle ingestion, validation, ORB calculation, breakout execution, and trailing stop management."""
+    start_perf = timemod.perf_counter()
     ts = now_utc or datetime.now(timezone.utc)
     dt_ist = to_ist(ts)
     session_date = dt_ist.strftime("%Y-%m-%d")
@@ -667,6 +689,30 @@ class ScheduledDailyRunner:
       summary["unrealized_pnl_inr"] = str(snap.unrealized_pnl_inr)
       summary["net_equity_inr"] = str(snap.net_equity_inr)
       summary["candle_cache_stats"] = self.candle_cache.get_cache_stats()
+
+      # Latency Telemetry Tracking
+      elapsed_ms = (timemod.perf_counter() - start_perf) * 1000.0
+      summary["latency_ms"] = round(elapsed_ms, 2)
+      summary["latency_budget_exceeded"] = elapsed_ms > 500.0
+
+      self.total_ticks_executed += 1
+      self.recent_tick_latencies.append({
+          "timestamp_ist": dt_ist.isoformat(),
+          "latency_ms": round(elapsed_ms, 2),
+          "symbols_evaluated": summary["symbols_evaluated"],
+          "signals": len(summary["signals_generated"]),
+          "orders": len(summary["orders_placed"]),
+      })
+      if len(self.recent_tick_latencies) > 100:
+        self.recent_tick_latencies.pop(0)
+
+      if elapsed_ms > 500.0:
+        logger.warning(
+            "Intraday tick evaluation exceeded 500ms budget: %.2f ms (symbols: %d)",
+            elapsed_ms,
+            summary["symbols_evaluated"],
+        )
+
       return summary
 
   def job_reconcile_and_report(self, now_utc: datetime | None = None) -> dict[str, Any]:
@@ -690,7 +736,10 @@ class ScheduledDailyRunner:
               total_fees_paid=to_decimal(snap.total_fees_inr),
               trades_count=len(positions_today),
           )
-          self.notification_service.send_message_sync(msg_text)
+          if hasattr(self.notification_service, "send_message_background"):
+            self.notification_service.send_message_background(msg_text)
+          else:
+            self.notification_service.send_message_sync(msg_text)
         except Exception as e:
           logger.warning(f"Failed to dispatch EOD notification: {e}")
 

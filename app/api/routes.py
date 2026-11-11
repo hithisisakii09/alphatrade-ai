@@ -256,6 +256,7 @@ def get_runner_status():
       "scheduler_timezone": "Asia/Kolkata",
       "jobs_count": len(_daily_runner.get_jobs_summary()),
       "jobs": _daily_runner.get_jobs_summary(),
+      "telemetry": _daily_runner.get_telemetry_summary(),
   }
 
 

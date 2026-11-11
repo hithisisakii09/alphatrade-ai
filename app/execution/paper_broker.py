@@ -216,7 +216,10 @@ class PaperBroker:
             total_fees=cost_bd.total_fees_inr,
             reason=order.reason,
         )
-        self.notification_service.send_message_sync(fill_msg)
+        if hasattr(self.notification_service, "send_message_background"):
+          self.notification_service.send_message_background(fill_msg)
+        else:
+          self.notification_service.send_message_sync(fill_msg)
       except Exception:
         pass
 

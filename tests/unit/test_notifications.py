@@ -114,3 +114,21 @@ def test_send_message_sync_mocked():
     fail_res = svc.send_message_sync("Test Alert Under Failure")
     assert fail_res["discord"] is False
     assert fail_res["telegram"] is False
+
+
+def test_send_message_background_returns_immediately():
+  import time
+  svc = WebhookNotificationService(
+      discord_webhook_url="https://discord.com/api/webhooks/mock",
+  )
+
+  def slow_post(*args, **kwargs):
+    time.sleep(0.5)
+    return MagicMock(status_code=200)
+
+  with patch("httpx.Client.post", side_effect=slow_post):
+    start = time.perf_counter()
+    svc.send_message_background("Background Alert")
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    # Must return immediately (< 100ms) without waiting for the 500ms slow_post
+    assert elapsed_ms < 100.0
