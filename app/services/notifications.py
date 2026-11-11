@@ -62,6 +62,27 @@ class WebhookNotificationService:
       msg += f"• **Reason / Trigger:** `{reason}`\n"
     return msg
 
+  def format_position_exit_message(
+      self,
+      symbol: str,
+      entry_price: Decimal,
+      exit_price: Decimal,
+      quantity: int,
+      net_pnl_inr: Decimal,
+      exit_reason: str,
+  ) -> str:
+    """Formats position exit and realized PnL alert."""
+    pnl_emoji = "🟢 PROFIT" if net_pnl_inr >= Decimal("0.00") else "🔴 LOSS"
+    return (
+        f"**[PAPER POSITION CLOSED] {pnl_emoji}**\n"
+        f"• **Symbol:** `{symbol}`\n"
+        f"• **Quantity:** `{quantity}` shares\n"
+        f"• **Entry Price:** `₹{entry_price:,.2f}`\n"
+        f"• **Exit Price:** `₹{exit_price:,.2f}`\n"
+        f"• **Net Realized PnL:** `₹{net_pnl_inr:,.2f}`\n"
+        f"• **Exit Reason:** `{exit_reason}`\n"
+    )
+
   def format_trailing_stop_message(
       self,
       symbol: str,

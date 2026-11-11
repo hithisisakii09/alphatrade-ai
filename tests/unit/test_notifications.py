@@ -78,6 +78,22 @@ def test_message_formatting_integrity():
   assert "+1.45%" in eod_msg
   assert "Closed Trades Today:** `3`" in eod_msg
 
+  # 5. Position exit formatting
+  exit_msg = svc.format_position_exit_message(
+      symbol="RELIANCE",
+      entry_price=Decimal("1250.50"),
+      exit_price=Decimal("1281.75"),
+      quantity=40,
+      net_pnl_inr=Decimal("1201.85"),
+      exit_reason="TRAILING_STOP_EXIT",
+  )
+  assert "PAPER POSITION CLOSED" in exit_msg
+  assert "RELIANCE" in exit_msg
+  assert "₹1,250.50" in exit_msg
+  assert "₹1,281.75" in exit_msg
+  assert "₹1,201.85" in exit_msg
+  assert "TRAILING_STOP_EXIT" in exit_msg
+
 
 def test_send_message_sync_mocked():
   svc = WebhookNotificationService(
