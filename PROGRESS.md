@@ -1,6 +1,6 @@
 # AlphaTrade AI v2.0 — Engineering Progress & Gate Verification Log
 
-**Current Status:** **ALL MILESTONES M0 THROUGH M7 COMPLETE • Live Market Ingestion & Breakout Execution Loop Verified (28/28 Tests Passing)**  
+**Current Status:** **ALL MILESTONES M0 THROUGH M7 COMPLETE • Live Market Ingestion, Incremental Caching & EOD Liquidation Verified (29/29 Tests Passing)**  
 **Last Updated:** 11 November 2026  
 **Active Execution Mode:** Strictly `PAPER`  
 **Active Strategy Profile:** `STANDARD_RESEARCH_100K` (`INTRADAY_V2` Exit Mode)  
@@ -62,9 +62,9 @@
     - 2x Stress (0.050%): 102 trades, Net Exp = +0.9025 R (+450.16 INR), PF = 7.59
     - 3x Extreme (0.075%): 102 trades, Net Exp = +0.8404 R (+425.48 INR), PF = 6.88
   - Verified resilient with positive net expectancy across all stress conditions.
-- **Complete Test Suite Passing (28/28 tests, exit code 0):**
-  - `pytest -v`: **28 passed, 0 failed** in 24.36s.
-  - `run_tests.py`: **28 passed, 0 failed** in 19.12s.
+- **Complete Test Suite Passing (29/29 tests, exit code 0):**
+  - `pytest -v`: **29 passed, 0 failed** in 25.10s.
+  - `run_tests.py`: **29 passed, 0 failed** in 20.05s.
   - Fully migrated to Pydantic v2 `@field_validator` syntax with zero console deprecation warnings.
 - **Production Packaging, CI/CD & Operations Complete:**
   - Built lean 74.7 MB production Docker image (`Dockerfile`) based on `python:3.12-slim` with Asia/Kolkata timezone and health check.
@@ -73,9 +73,13 @@
   - Created unified operational pre-flight health audit script in `scripts/audit_system_health.py` validating 8/8 subsystems.
   - Added standalone webhook notification test harness in `scripts/test_webhook_alert.py`.
   - Added interactive manual evaluation tick button (`⚡ Run 1m Market Tick`) and 20-token master view to live HTML dashboard.
-  - Added multi-day historical 1m candle ingestion tool (`scripts/download_historical_candles.py`) with idempotent timestamp lookups, populating **5,923 real 1m candles** across 13 NIFTY 100 constituents into SQLite.
-  - Built event-driven backtesting CLI (`scripts/run_live_backtest.py`) with isolated in-memory simulation sessions and automated persistence of run summaries and trade logs into SQLite.
+  - Added multi-day historical 1m candle ingestion tool (`scripts/download_historical_candles.py`) with idempotent timestamp lookups, populating **9,500 real 1m candles** across all 20 NIFTY 100 constituents into SQLite.
+  - Built event-driven backtesting CLI (`scripts/run_live_backtest.py`) supporting `--symbols ALL` with isolated in-memory simulation sessions and automated persistence of run summaries and trade logs into SQLite.
+  - Built hyperparameter sensitivity sweep CLI (`scripts/run_parameter_sweep.py`) running 18-combination matrices across Opening Ranges, Stops, and Slippage tiers.
+  - Built high-performance `LiveCandleCache` in `app/data/cache.py` delivering incremental 1m delta ingestion, cached indicator state, and >93% hit rates.
+  - Built real-time Mark-to-Market (MTM) Live Cash management tracking cash, margin, and equity on every market tick.
   - Added interactive **Tab 6: Backtest & Walk-Forward Research** to live HTML dashboard (`http://127.0.0.1:8000/dashboard/`) featuring live candle breakdown, historical simulation performance matrix, interactive trade logs, and browser-triggered simulation (`POST /backtest/run`).
+  - Verified runtime execution of 15:00 IST forced EOD liquidation cycle (`nse_eod_liquidation_1500`) liquidating all intraday positions to zero open overnight risk and returning deployed margin to cash with 100% double-entry ledger reconciliation (`RECONCILED_OK`).
 
 ---
 
