@@ -211,6 +211,7 @@
       <div class="sync-bar">
         <span id="sync-status">Live polling active (5s)</span>
         <button class="refresh-btn" onclick="refreshAllData()">&#x21bb; Refresh Now</button>
+        <button class="refresh-btn" style="background:var(--teal); color:#fff; border-color:var(--teal);" onclick="triggerLiveTick(event)">&#x26a1; Run 1m Market Tick</button>
       </div>
     </div>
 
@@ -259,6 +260,20 @@
             <tr><td><strong>ICICIBANK</strong></td><td>4963</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
             <tr><td><strong>INFY</strong></td><td>1594</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
             <tr><td><strong>SBIN</strong></td><td>3045</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>BHARTIARTL</strong></td><td>10604</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>ITC</strong></td><td>1660</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>KOTAKBANK</strong></td><td>1922</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>LT</strong></td><td>11483</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>AXISBANK</strong></td><td>5900</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>HINDUNILVR</strong></td><td>1394</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>BAJFINANCE</strong></td><td>317</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>MARUTI</strong></td><td>10999</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>TITAN</strong></td><td>3506</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>SUNPHARMA</strong></td><td>3351</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>TATAMOTORS</strong></td><td>3456</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>NTPC</strong></td><td>11630</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>POWERGRID</strong></td><td>14977</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
+            <tr><td><strong>TATASTEEL</strong></td><td>3499</td><td>₹0.05</td><td>10.0% (F&amp;O Dynamic)</td><td>&ge; ₹25 Cr</td><td><span class="pill ok">ELIGIBLE</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -498,6 +513,33 @@
       }
 
       document.getElementById('sync-status').textContent = 'Last synced at ' + new Date().toLocaleTimeString();
+    }
+
+    async function triggerLiveTick(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Evaluating...';
+        btn.disabled = true;
+      }
+      try {
+        const resp = await fetch('/runner/tick', { method: 'POST' });
+        const res = await resp.json();
+        if (res.status === 'SUCCESS' && res.summary) {
+          alert(`Live Evaluation Tick Finished!\nStatus: ${res.summary.status}\nSymbols Evaluated: ${res.summary.symbols_evaluated}\nSignals Generated: ${res.summary.signals_generated.length}\nOrders Placed: ${res.summary.orders_placed.length}\nPositions Closed: ${res.summary.positions_closed.length}`);
+        } else {
+          alert('Tick completed: ' + JSON.stringify(res));
+        }
+        await refreshAllData();
+      } catch (e) {
+        alert('Tick error: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
     }
 
     // Auto-refresh every 5 seconds
