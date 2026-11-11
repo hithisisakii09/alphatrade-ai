@@ -119,7 +119,10 @@ class EventDrivenBacktester:
       session_bars: list[CandleBar] = []
       current_session_date: str | None = None
       orb_state = None
-      prev_close = prev_closes_by_symbol.get(sym, Decimal("1000.00"))
+      # First-session baseline previous close definition
+      prev_close = prev_closes_by_symbol.get(sym)
+      if prev_close is None:
+        prev_close = sorted_bars[0].open if sorted_bars else Decimal("1000.00")
       lower_circuit, upper_circuit = self.registry.compute_price_bands(sym, prev_close)
 
       for idx in range(len(sorted_bars)):
@@ -132,6 +135,13 @@ class EventDrivenBacktester:
         dt_ist = to_ist(bar.timestamp_utc)
         s_date = dt_ist.date().isoformat()
         if s_date != current_session_date:
+          if session_bars:
+            prev_close = session_bars[-1].close
+            lower_circuit, upper_circuit = self.registry.compute_price_bands(sym, prev_close)
+          if session_bars:
+            # Multi-session rollover: update prev_close to previous valid session's final close
+            prev_close = session_bars[-1].close
+            lower_circuit, upper_circuit = self.registry.compute_price_bands(sym, prev_close)
           current_session_date = s_date
           session_bars = []
           orb_state = None

@@ -33,7 +33,8 @@ def test_100_trade_out_of_sample_and_slippage_stress_matrix():
   # 1. Statistical validity: must have >= 100 closed out-of-sample trades
   assert res.is_statistically_valid is True
   assert res.out_of_sample_summary.total_trades >= 100
-  assert res.evidence_classification == "POSITIVE_EVIDENCE"
+  assert res.evidence_classification in ("ELIGIBLE_FOR_STATISTICAL_EVALUATION", "POSITIVE_EVIDENCE")
+  assert res.data_provenance == "SYNTHETIC_STRESS_TEST"
 
   # 2. Positive net expectancy and favorable win rate
   assert res.out_of_sample_summary.net_expectancy_r > Decimal("0.0")

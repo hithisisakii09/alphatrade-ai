@@ -14,6 +14,8 @@ from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.backtest import test_backtester_and_lookahead as t_bt
 from tests.backtest import test_walk_forward_oos as t_oos
+from tests.backtest import test_research_provenance as t_prov
+from tests.backtest import test_multi_session_backtest as t_multi
 from tests.safety import test_live_guard_and_edge_cases as t_safe
 
 
@@ -77,6 +79,22 @@ def run_all() -> int:
       ("backtest/test_walk_forward_oos.py", [
           t_oos.test_walk_forward_chronological_split_integrity,
           t_oos.test_100_trade_out_of_sample_and_slippage_stress_matrix,
+      ]),
+      ("backtest/test_research_provenance.py", [
+          t_prov.test_classify_evidence_sample_size_thresholds,
+          t_prov.test_compute_confidence_intervals_insufficient_sample,
+          t_prov.test_compute_confidence_intervals_valid_sample,
+          t_prov.test_real_historical_walk_forward_provenance_and_classification,
+          t_prov.test_synthetic_stress_test_provenance_cannot_be_confused_with_historical,
+          t_prov.test_paper_safety_guard_enforced,
+      ]),
+      ("backtest/test_multi_session_backtest.py", [
+          t_multi.test_two_consecutive_sessions_updates_prev_close_and_circuit_bands,
+          t_multi.test_multiple_symbols_independent_previous_closes,
+          t_multi.test_missing_session_data_uses_last_available_close,
+          t_multi.test_incomplete_session_rollover,
+          t_multi.test_overnight_unadjusted_split_gap_quarantines_symbol,
+          t_multi.test_first_session_fallback_when_prev_close_not_provided,
       ]),
       ("safety/test_live_guard_and_edge_cases.py", [
           lambda: _run_with_monkeypatch(t_safe.test_live_mode_rejected_at_startup_and_by_guard),
