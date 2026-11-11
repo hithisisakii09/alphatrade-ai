@@ -294,6 +294,11 @@
           <div class="sub">Available unallocated trading cash</div>
         </div>
         <div class="card">
+          <h3>Realized P&amp;L (Session)</h3>
+          <div id="kpi-realized-pnl" class="val" style="color: var(--green);">₹0.00</div>
+          <div class="sub">Closed positions net return</div>
+        </div>
+        <div class="card">
           <h3>Deployed Exposure</h3>
           <div id="kpi-deployed-exposure" class="val" style="color: var(--amber);">₹0.00</div>
           <div class="sub">Active margin in open positions</div>
@@ -535,11 +540,27 @@
   </main>
 
   <script>
+    function setElText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function setElHtml(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    }
+
+    function setElStyle(id, prop, val) {
+      const el = document.getElementById(id);
+      if (el && el.style) el.style[prop] = val;
+    }
+
     function switchView(name, btn) {
       document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('view-' + name).classList.add('active');
-      btn.classList.add('active');
+      const targetPanel = document.getElementById('view-' + name);
+      if (targetPanel) targetPanel.classList.add('active');
+      if (btn) btn.classList.add('active');
     }
 
     async function fetchJson(endpoint) {
@@ -554,122 +575,128 @@
     }
 
     async function refreshAllData() {
-      document.getElementById('sync-status').textContent = 'Fetching data...';
+      setElText('sync-status', 'Fetching data...');
 
       // 1. Portfolio & Daily Report
       const portfolio = await fetchJson('/portfolio');
       if (portfolio) {
-        document.getElementById('kpi-starting-capital').textContent = '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        document.getElementById('kpi-cash-balance').textContent = '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        if (portfolio.deployed_exposure_inr) {
-          document.getElementById('kpi-deployed-exposure').textContent = '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        setElText('kpi-starting-capital', '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        setElText('kpi-cash-balance', '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        if (portfolio.deployed_exposure_inr !== undefined && portfolio.deployed_exposure_inr !== null) {
+          setElText('kpi-deployed-exposure', '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
         }
-        if (portfolio.net_equity_inr) {
-          document.getElementById('kpi-net-equity').textContent = '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (portfolio.net_equity_inr !== undefined && portfolio.net_equity_inr !== null) {
+          setElText('kpi-net-equity', '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
         }
         if (portfolio.candle_cache) {
-          document.getElementById('kpi-cache-stats').textContent = `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`;
-          document.getElementById('sub-cache-bars').textContent = `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`;
+          setElText('kpi-cache-stats', `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`);
+          setElText('sub-cache-bars', `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`);
         }
         const recPill = portfolio.reconciled 
           ? '<span class="pill ok">RECONCILED_OK</span>' 
           : '<span class="pill danger">MISMATCH</span>';
-        document.getElementById('kpi-ledger-status').innerHTML = recPill;
+        setElHtml('kpi-ledger-status', recPill);
       }
 
       const dailyRep = await fetchJson('/reports/daily');
-      if (dailyRep) {
+      if (dailyRep && dailyRep.realized_pnl_inr !== undefined && dailyRep.realized_pnl_inr !== null) {
         const pnl = Number(dailyRep.realized_pnl_inr);
         const prefix = pnl >= 0 ? '+₹' : '-₹';
-        document.getElementById('kpi-realized-pnl').textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        document.getElementById('kpi-realized-pnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        setElText('kpi-realized-pnl', prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        setElStyle('kpi-realized-pnl', 'color', pnl >= 0 ? 'var(--green)' : 'var(--red)');
       }
 
       // 2. Positions Table
       const posData = await fetchJson('/positions');
       const posTbody = document.getElementById('positions-tbody');
-      if (posData && posData.positions && posData.positions.length > 0) {
-        posTbody.innerHTML = posData.positions.map(p => `
-          <tr>
-            <td><strong>${p.symbol}</strong></td>
-            <td><span class="pill ${p.status === 'OPEN' ? 'warn' : 'ok'}">${p.status}</span></td>
-            <td>${p.quantity}</td>
-            <td>₹${Number(p.entry_price).toFixed(2)}</td>
-            <td>${p.exit_price ? '₹' + Number(p.exit_price).toFixed(2) : '—'}</td>
-            <td>₹${Number(p.initial_stop_price).toFixed(2)}</td>
-            <td>₹${Number(p.trailing_activation_price).toFixed(2)}</td>
-            <td>₹${Number(p.highest_price_since_entry).toFixed(2)}</td>
-            <td>${p.trailing_activated ? '<span class="pill ok">ACTIVATED</span>' : '<span class="pill warn">WAITING</span>'}</td>
-            <td style="font-weight:600; color:${Number(p.realized_pnl_inr) >= 0 ? 'var(--green)' : 'var(--red)'};">
-              ${Number(p.realized_pnl_inr) >= 0 ? '+' : ''}₹${Number(p.realized_pnl_inr).toFixed(2)}
-            </td>
-            <td><span class="pill ok">${p.exit_reason || 'IN_POSITION'}</span></td>
-          </tr>
-        `).join('');
-      } else {
-        posTbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--muted);">No open or closed positions recorded yet.</td></tr>';
+      if (posTbody) {
+        if (posData && posData.positions && posData.positions.length > 0) {
+          posTbody.innerHTML = posData.positions.map(p => `
+            <tr>
+              <td><strong>${p.symbol}</strong></td>
+              <td><span class="pill ${p.status === 'OPEN' ? 'warn' : 'ok'}">${p.status}</span></td>
+              <td>${p.quantity}</td>
+              <td>₹${Number(p.entry_price).toFixed(2)}</td>
+              <td>${p.exit_price ? '₹' + Number(p.exit_price).toFixed(2) : '—'}</td>
+              <td>₹${Number(p.initial_stop_price).toFixed(2)}</td>
+              <td>₹${Number(p.trailing_activation_price).toFixed(2)}</td>
+              <td>₹${Number(p.highest_price_since_entry).toFixed(2)}</td>
+              <td>${p.trailing_activated ? '<span class="pill ok">ACTIVATED</span>' : '<span class="pill warn">WAITING</span>'}</td>
+              <td style="font-weight:600; color:${Number(p.realized_pnl_inr) >= 0 ? 'var(--green)' : 'var(--red)'};">
+                ${Number(p.realized_pnl_inr) >= 0 ? '+' : ''}₹${Number(p.realized_pnl_inr).toFixed(2)}
+              </td>
+              <td><span class="pill ok">${p.exit_reason || 'IN_POSITION'}</span></td>
+            </tr>
+          `).join('');
+        } else {
+          posTbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--muted);">No open or closed positions recorded yet.</td></tr>';
+        }
       }
 
       // 3. Orders Table
       const orderData = await fetchJson('/orders');
       const ordTbody = document.getElementById('orders-tbody');
-      if (orderData && orderData.orders && orderData.orders.length > 0) {
-        ordTbody.innerHTML = orderData.orders.map(o => `
-          <tr>
-            <td><code>${o.order_id}</code></td>
-            <td style="font-size:0.78rem;">${o.idempotency_key}</td>
-            <td><strong>${o.symbol}</strong></td>
-            <td><span class="pill ${o.side === 'BUY' ? 'ok' : 'warn'}">${o.side}</span></td>
-            <td>${o.requested_qty}</td>
-            <td>${o.filled_qty}</td>
-            <td>₹${Number(o.reference_price).toFixed(2)}</td>
-            <td><span class="pill ${o.status === 'FILLED' ? 'ok' : 'warn'}">${o.status}</span></td>
-            <td>${o.reason || '—'}</td>
-          </tr>
-        `).join('');
-      } else {
-        ordTbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted);">No orders submitted yet.</td></tr>';
+      if (ordTbody) {
+        if (orderData && orderData.orders && orderData.orders.length > 0) {
+          ordTbody.innerHTML = orderData.orders.map(o => `
+            <tr>
+              <td><code>${o.order_id}</code></td>
+              <td style="font-size:0.78rem;">${o.idempotency_key}</td>
+              <td><strong>${o.symbol}</strong></td>
+              <td><span class="pill ${o.side === 'BUY' ? 'ok' : 'warn'}">${o.side}</span></td>
+              <td>${o.requested_qty}</td>
+              <td>${o.filled_qty}</td>
+              <td>₹${Number(o.reference_price).toFixed(2)}</td>
+              <td><span class="pill ${o.status === 'FILLED' ? 'ok' : 'warn'}">${o.status}</span></td>
+              <td>${o.reason || '—'}</td>
+            </tr>
+          `).join('');
+        } else {
+          ordTbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted);">No orders submitted yet.</td></tr>';
+        }
       }
 
       // 4. Market Status
       const mkt = await fetchJson('/market/status');
       if (mkt) {
-        document.getElementById('val-session-state').textContent = mkt.session_state;
+        setElText('val-session-state', mkt.session_state);
       }
 
       // 5. Backtest Runs & Candles Summary
       const btData = await fetchJson('/backtests');
       const btTbody = document.getElementById('backtests-tbody');
       const btTradesTbody = document.getElementById('bt-trades-tbody');
-      if (btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
-        btTbody.innerHTML = btData.backtest_runs.map((r, i) => `
-          <tr style="cursor:pointer;" onclick="renderBtTrades(${i})">
-            <td><code>${r.run_id}</code></td>
-            <td style="font-size:0.8rem;">${r.dataset_id}</td>
-            <td><strong>${r.total_trades}</strong></td>
-            <td>${Number(r.win_rate_pct).toFixed(1)}%</td>
-            <td>${Number(r.profit_factor).toFixed(2)}</td>
-            <td style="color:${Number(r.net_expectancy_inr) >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600;">
-              ${Number(r.net_expectancy_inr) >= 0 ? '+' : ''}₹${Number(r.net_expectancy_inr).toFixed(2)}
-            </td>
-            <td>${Number(r.net_expectancy_r) >= 0 ? '+' : ''}${Number(r.net_expectancy_r).toFixed(2)} R</td>
-            <td>${Number(r.max_drawdown_pct).toFixed(2)}%</td>
-            <td>${Number(r.avg_cost_to_risk_pct).toFixed(1)}%</td>
-            <td><span class="pill ${r.evidence_classification === 'POSITIVE_EVIDENCE' ? 'ok' : 'warn'}">${r.evidence_classification}</span></td>
-          </tr>
-        `).join('');
+      if (btTbody) {
+        if (btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
+          btTbody.innerHTML = btData.backtest_runs.map((r, i) => `
+            <tr style="cursor:pointer;" onclick="renderBtTrades(${i})">
+              <td><code>${r.run_id}</code></td>
+              <td style="font-size:0.8rem;">${r.dataset_id}</td>
+              <td><strong>${r.total_trades}</strong></td>
+              <td>${Number(r.win_rate_pct).toFixed(1)}%</td>
+              <td>${Number(r.profit_factor).toFixed(2)}</td>
+              <td style="color:${Number(r.net_expectancy_inr) >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600;">
+                ${Number(r.net_expectancy_inr) >= 0 ? '+' : ''}₹${Number(r.net_expectancy_inr).toFixed(2)}
+              </td>
+              <td>${Number(r.net_expectancy_r) >= 0 ? '+' : ''}${Number(r.net_expectancy_r).toFixed(2)} R</td>
+              <td>${Number(r.max_drawdown_pct).toFixed(2)}%</td>
+              <td>${Number(r.avg_cost_to_risk_pct).toFixed(1)}%</td>
+              <td><span class="pill ${r.evidence_classification === 'POSITIVE_EVIDENCE' ? 'ok' : 'warn'}">${r.evidence_classification}</span></td>
+            </tr>
+          `).join('');
 
-        window._btRuns = btData.backtest_runs;
-        if (btTradesTbody && window._btRuns[0] && window._btRuns[0].trades) {
-          renderBtTrades(0);
+          window._btRuns = btData.backtest_runs;
+          if (btTradesTbody && window._btRuns[0] && window._btRuns[0].trades) {
+            renderBtTrades(0);
+          }
+        } else {
+          btTbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">No backtests executed yet.</td></tr>';
         }
-      } else {
-        btTbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">No backtests executed yet.</td></tr>';
       }
 
       const cData = await fetchJson('/market/candles-summary');
       if (cData) {
-        document.getElementById('kpi-total-candles').textContent = Number(cData.total_candles).toLocaleString();
+        setElText('kpi-total-candles', Number(cData.total_candles).toLocaleString());
         const cTbody = document.getElementById('candles-tbody');
         if (cTbody && cData.by_symbol) {
           cTbody.innerHTML = cData.by_symbol.map(s => `
@@ -686,12 +713,10 @@
       // 6. Risk Status
       const riskData = await fetchJson('/risk/status');
       if (riskData) {
-        const ksEl = document.getElementById('kpi-kill-switch');
-        if (ksEl) {
-          ksEl.innerHTML = riskData.kill_switch_active 
-            ? '<span class="pill danger">TRIPPED (ACTIVE)</span>' 
-            : '<span class="pill ok">STANDBY (INACTIVE)</span>';
-        }
+        const ksPill = riskData.kill_switch_active 
+          ? '<span class="pill danger">TRIPPED (ACTIVE)</span>' 
+          : '<span class="pill ok">STANDBY (INACTIVE)</span>';
+        setElHtml('kpi-kill-switch', ksPill);
       }
 
       // 7. Runner & Watchdog Status
@@ -701,7 +726,7 @@
           ? '<span class="pill ok">RUNNING</span>' 
           : '<span class="pill warn">STOPPED</span>';
         setElHtml('kpi-runner-state', statePill);
-        setElText('kpi-runner-jobs-count', `${runnerData.jobs_count || runnerData.jobs.length} Active Jobs`);
+        setElText('kpi-runner-jobs-count', `${runnerData.jobs_count || (runnerData.jobs ? runnerData.jobs.length : 8)} Active Jobs`);
 
         if (runnerData.watchdog) {
           const wd = runnerData.watchdog;
