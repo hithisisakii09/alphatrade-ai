@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.2",
+  "version": "2026.11.1",
   "universe": "NIFTY_100_LIQUID",
   "instruments": [
     {
@@ -99,7 +99,7 @@
       "is_fno": true,
       "median_daily_turnover_cr": "1150.0",
       "eligible": true,
-      "sector": "CAPITAL_GOODS"
+      "sector": "INFRASTRUCTURE"
     },
     {
       "symbol": "AXISBANK",
@@ -146,17 +146,6 @@
       "sector": "FINANCIAL_SERVICES"
     },
     {
-      "symbol": "ASIANPAINT",
-      "exchange": "NSE",
-      "isin": "INE021A01026",
-      "tick_size": "0.05",
-      "price_band_pct": "10.0",
-      "is_fno": true,
-      "median_daily_turnover_cr": "650.0",
-      "eligible": true,
-      "sector": "CONSUMER_DURABLES"
-    },
-    {
       "symbol": "MARUTI",
       "exchange": "NSE",
       "isin": "INE585B01010",
@@ -168,17 +157,6 @@
       "sector": "AUTO"
     },
     {
-      "symbol": "HCLTECH",
-      "exchange": "NSE",
-      "isin": "INE860A01027",
-      "tick_size": "0.05",
-      "price_band_pct": "10.0",
-      "is_fno": true,
-      "median_daily_turnover_cr": "720.0",
-      "eligible": true,
-      "sector": "IT"
-    },
-    {
       "symbol": "TITAN",
       "exchange": "NSE",
       "isin": "INE280A01028",
@@ -187,7 +165,7 @@
       "is_fno": true,
       "median_daily_turnover_cr": "760.0",
       "eligible": true,
-      "sector": "CONSUMER_DISCRETIONARY"
+      "sector": "CONSUMER"
     },
     {
       "symbol": "SUNPHARMA",
@@ -212,17 +190,6 @@
       "sector": "AUTO"
     },
     {
-      "symbol": "ULTRACEMCO",
-      "exchange": "NSE",
-      "isin": "INE481G01011",
-      "tick_size": "0.05",
-      "price_band_pct": "10.0",
-      "is_fno": true,
-      "median_daily_turnover_cr": "590.0",
-      "eligible": true,
-      "sector": "CEMENT"
-    },
-    {
       "symbol": "NTPC",
       "exchange": "NSE",
       "isin": "INE733E01010",
@@ -231,7 +198,7 @@
       "is_fno": true,
       "median_daily_turnover_cr": "620.0",
       "eligible": true,
-      "sector": "POWER"
+      "sector": "ENERGY"
     },
     {
       "symbol": "POWERGRID",
@@ -242,7 +209,7 @@
       "is_fno": true,
       "median_daily_turnover_cr": "580.0",
       "eligible": true,
-      "sector": "POWER"
+      "sector": "ENERGY"
     },
     {
       "symbol": "TATASTEEL",

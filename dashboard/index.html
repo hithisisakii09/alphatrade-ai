@@ -304,6 +304,11 @@
           <div class="sub">Cash + Deployed + Unrealized MTM</div>
         </div>
         <div class="card">
+          <h3>Realized P&amp;L (Today)</h3>
+          <div id="kpi-realized-pnl" class="val" style="color: var(--green);">₹0.00</div>
+          <div class="sub">Closed positions net of statutory friction</div>
+        </div>
+        <div class="card">
           <h3>Live Candle Cache</h3>
           <div id="kpi-cache-stats" class="val" style="color: var(--teal);">100% Hit Rate</div>
           <div class="sub"><span id="sub-cache-bars">0 bars cached</span> across session</div>
@@ -538,36 +543,49 @@
       }
     }
 
+    function setElText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function setElHtml(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    }
+
     async function refreshAllData() {
-      document.getElementById('sync-status').textContent = 'Fetching data...';
+      setElText('sync-status', 'Fetching data...');
 
       // 1. Portfolio & Daily Report
       const portfolio = await fetchJson('/portfolio');
       if (portfolio) {
-        document.getElementById('kpi-starting-capital').textContent = '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        document.getElementById('kpi-cash-balance').textContent = '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        if (portfolio.deployed_exposure_inr) {
-          document.getElementById('kpi-deployed-exposure').textContent = '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        setElText('kpi-starting-capital', '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        setElText('kpi-cash-balance', '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        if (portfolio.deployed_exposure_inr !== undefined && portfolio.deployed_exposure_inr !== null) {
+          setElText('kpi-deployed-exposure', '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
         }
-        if (portfolio.net_equity_inr) {
-          document.getElementById('kpi-net-equity').textContent = '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (portfolio.net_equity_inr !== undefined && portfolio.net_equity_inr !== null) {
+          setElText('kpi-net-equity', '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
         }
         if (portfolio.candle_cache) {
-          document.getElementById('kpi-cache-stats').textContent = `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`;
-          document.getElementById('sub-cache-bars').textContent = `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`;
+          setElText('kpi-cache-stats', `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`);
+          setElText('sub-cache-bars', `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`);
         }
         const recPill = portfolio.reconciled 
           ? '<span class="pill ok">RECONCILED_OK</span>' 
           : '<span class="pill danger">MISMATCH</span>';
-        document.getElementById('kpi-ledger-status').innerHTML = recPill;
+        setElHtml('kpi-ledger-status', recPill);
       }
 
       const dailyRep = await fetchJson('/reports/daily');
       if (dailyRep) {
         const pnl = Number(dailyRep.realized_pnl_inr);
         const prefix = pnl >= 0 ? '+₹' : '-₹';
-        document.getElementById('kpi-realized-pnl').textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
-        document.getElementById('kpi-realized-pnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const pnlEl = document.getElementById('kpi-realized-pnl');
+        if (pnlEl) {
+          pnlEl.textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
+          pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        }
       }
 
       // 2. Positions Table
@@ -619,14 +637,14 @@
       // 4. Market Status
       const mkt = await fetchJson('/market/status');
       if (mkt) {
-        document.getElementById('val-session-state').textContent = mkt.session_state;
+        setElText('val-session-state', mkt.session_state);
       }
 
       // 5. Backtest Runs & Candles Summary
       const btData = await fetchJson('/backtests');
       const btTbody = document.getElementById('backtests-tbody');
       const btTradesTbody = document.getElementById('bt-trades-tbody');
-      if (btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
+      if (btTbody && btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
         btTbody.innerHTML = btData.backtest_runs.map((r, i) => `
           <tr style="cursor:pointer;" onclick="renderBtTrades(${i})">
             <td><code>${r.run_id}</code></td>
@@ -648,13 +666,13 @@
         if (btTradesTbody && window._btRuns[0] && window._btRuns[0].trades) {
           renderBtTrades(0);
         }
-      } else {
+      } else if (btTbody) {
         btTbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">No backtests executed yet.</td></tr>';
       }
 
       const cData = await fetchJson('/market/candles-summary');
       if (cData) {
-        document.getElementById('kpi-total-candles').textContent = Number(cData.total_candles).toLocaleString();
+        setElText('kpi-total-candles', Number(cData.total_candles).toLocaleString());
         const cTbody = document.getElementById('candles-tbody');
         if (cTbody && cData.by_symbol) {
           cTbody.innerHTML = cData.by_symbol.map(s => `
@@ -668,7 +686,7 @@
         }
       }
 
-      document.getElementById('sync-status').textContent = 'Last synced at ' + new Date().toLocaleTimeString();
+      setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
     function renderBtTrades(idx) {

@@ -70,3 +70,4 @@ All enhancements were tested under unit and integration suites without breaking 
    - Breakout with $\text{RVOL} = 1.10\times$ is rejected with `INSUFFICIENT_RVOL`.
    - Breakout with $\text{RVOL} = 1.85\times$ triggers valid execution.
 4. **Unified Regression**: 46 passed, 0 failed in 26.8 seconds.
+
