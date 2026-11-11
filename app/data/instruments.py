@@ -22,6 +22,10 @@ class InstrumentRegistry:
   def get(self, symbol: str) -> InstrumentMeta | None:
     return self.instruments.get(symbol)
 
+  def get_sector(self, symbol: str) -> str:
+    inst = self.get(symbol)
+    return inst.sector if inst else "GENERAL"
+
   def is_eligible(self, symbol: str, min_turnover_cr: Decimal = Decimal("25.0")) -> tuple[bool, str]:
     inst = self.get(symbol)
     if inst is None:

@@ -15,6 +15,7 @@ from app.data.validator import CandleIngestionValidator, aggregate_1m_to_nm
 from app.execution.costs import NSECostEngine
 from app.execution.paper_broker import PaperBroker
 from app.market.indicators import (
+    compute_atr_series,
     compute_opening_range,
     compute_session_vwap,
     compute_time_of_day_rvol,
@@ -90,6 +91,7 @@ class EventDrivenBacktester:
         entry_cutoff_ist=app_config.strategy.entry_cutoff_ist,
         liquidation_start_ist=app_config.strategy.liquidation_start_ist,
         liquidation_deadline_ist=app_config.strategy.liquidation_deadline_ist,
+        registry=self.registry,
     )
     self.strategy_engine = ORBStrategyEngine(app_config.strategy, self.registry)
     self.ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
@@ -280,6 +282,8 @@ class EventDrivenBacktester:
           )
           if sig_eval.triggered and sig_eval.signal_id:
             candidate_breakouts += 1
+            atr_series = compute_atr_series(session_bars, 14)
+            latest_atr = atr_series[-1] if atr_series and atr_series[-1] is not None else None
             open_syms = {p.symbol for p in self.ledger.get_open_positions()}
             risk_dec = self.risk_engine.evaluate_entry_signal(
                 symbol=sym,
@@ -293,6 +297,7 @@ class EventDrivenBacktester:
                 open_positions_Symbols=open_syms,
                 daily_realized_pnl_inr=self.ledger.get_daily_realized_pnl(s_date),
                 daily_unrealized_pnl_inr=self.ledger.get_daily_unrealized_pnl(),
+                atr_value=latest_atr,
             )
             if risk_dec.approved and risk_dec.approved_quantity >= 1:
               order, _ = self.broker.submit_order(

@@ -21,6 +21,8 @@ class RiskProfileConfig(BaseModel):
   trailing_activation_pct: Decimal
   trailing_drop_pct: Decimal
   max_cost_to_risk_ratio: Decimal
+  max_positions_per_sector: int = Field(default=1)
+  atr_volatility_multiplier: Decimal = Field(default=Decimal("1.5"))
 
 
 class StrategyConfigModel(BaseModel):

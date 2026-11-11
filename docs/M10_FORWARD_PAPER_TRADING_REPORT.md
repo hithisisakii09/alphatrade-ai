@@ -73,3 +73,4 @@ All trading events format markdown notifications containing exact pure `Decimal`
 4. **End-of-Day Reconciliation**: Starting capital, ending cash, realized P&L, fees, and ledger integrity.
 
 Network failure testing verified that when external webhooks time out or disconnect, `send_message_sync` catches and logs the failure without raising exceptions or interrupting trading execution.
+

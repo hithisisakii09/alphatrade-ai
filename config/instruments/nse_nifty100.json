@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.1",
+  "version": "2026.11.2",
   "universe": "NIFTY_100_LIQUID",
   "instruments": [
     {
@@ -10,7 +10,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1850.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "ENERGY"
     },
     {
       "symbol": "TCS",
@@ -20,7 +21,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1120.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "IT"
     },
     {
       "symbol": "HDFCBANK",
@@ -30,7 +32,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "2400.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "BANKING"
     },
     {
       "symbol": "ICICIBANK",
@@ -40,7 +43,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1650.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "BANKING"
     },
     {
       "symbol": "INFY",
@@ -50,7 +54,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1340.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "IT"
     },
     {
       "symbol": "SBIN",
@@ -60,7 +65,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1590.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "BANKING"
     },
     {
       "symbol": "BHARTIARTL",
@@ -70,7 +76,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1280.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "TELECOM"
     },
     {
       "symbol": "ITC",
@@ -80,7 +87,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "980.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "FMCG"
     },
     {
       "symbol": "LT",
@@ -90,7 +98,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1150.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "CAPITAL_GOODS"
     },
     {
       "symbol": "AXISBANK",
@@ -100,7 +109,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1050.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "BANKING"
     },
     {
       "symbol": "KOTAKBANK",
@@ -110,7 +120,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "890.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "BANKING"
     },
     {
       "symbol": "HINDUNILVR",
@@ -120,7 +131,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "780.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "FMCG"
     },
     {
       "symbol": "BAJFINANCE",
@@ -130,7 +142,19 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1220.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "FINANCIAL_SERVICES"
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "exchange": "NSE",
+      "isin": "INE021A01026",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "650.0",
+      "eligible": true,
+      "sector": "CONSUMER_DURABLES"
     },
     {
       "symbol": "MARUTI",
@@ -140,7 +164,19 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "840.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "AUTO"
+    },
+    {
+      "symbol": "HCLTECH",
+      "exchange": "NSE",
+      "isin": "INE860A01027",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "720.0",
+      "eligible": true,
+      "sector": "IT"
     },
     {
       "symbol": "TITAN",
@@ -150,7 +186,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "760.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "CONSUMER_DISCRETIONARY"
     },
     {
       "symbol": "SUNPHARMA",
@@ -160,7 +197,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "690.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "PHARMA"
     },
     {
       "symbol": "TATAMOTORS",
@@ -170,7 +208,19 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1420.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "AUTO"
+    },
+    {
+      "symbol": "ULTRACEMCO",
+      "exchange": "NSE",
+      "isin": "INE481G01011",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "590.0",
+      "eligible": true,
+      "sector": "CEMENT"
     },
     {
       "symbol": "NTPC",
@@ -180,7 +230,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "620.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "POWER"
     },
     {
       "symbol": "POWERGRID",
@@ -190,7 +241,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "580.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "POWER"
     },
     {
       "symbol": "TATASTEEL",
@@ -200,7 +252,8 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "810.0",
-      "eligible": true
+      "eligible": true,
+      "sector": "METALS"
     },
     {
       "symbol": "ILLIQUID_TEST",
@@ -210,7 +263,8 @@
       "price_band_pct": "5.0",
       "is_fno": false,
       "median_daily_turnover_cr": "4.5",
-      "eligible": false
+      "eligible": false,
+      "sector": "GENERAL"
     }
   ]
 }

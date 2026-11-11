@@ -41,6 +41,7 @@ class InstrumentMeta(BaseModel):
   median_daily_turnover_cr: Decimal = Decimal("100.0")
   eligible: bool = True
   prev_close: Decimal | None = None
+  sector: str = "GENERAL"
 
   @field_validator("tick_size", "price_band_pct", "median_daily_turnover_cr", mode="before")
   @classmethod

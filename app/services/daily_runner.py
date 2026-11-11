@@ -30,6 +30,7 @@ from app.data.validator import CandleIngestionValidator, aggregate_1m_to_nm
 from app.execution.costs import NSECostEngine
 from app.execution.paper_broker import PaperBroker
 from app.market.indicators import (
+    compute_atr_series,
     compute_opening_range,
     compute_session_vwap,
     compute_time_of_day_rvol,
@@ -165,6 +166,7 @@ class ScheduledDailyRunner:
         entry_cutoff_ist=self.config.strategy.entry_cutoff_ist,
         liquidation_start_ist=self.config.strategy.liquidation_start_ist,
         liquidation_deadline_ist=self.config.strategy.liquidation_deadline_ist,
+        registry=self.registry,
     )
     self.strategy_engine = ORBStrategyEngine(self.config.strategy, self.registry)
     self.validator = CandleIngestionValidator()
@@ -604,6 +606,8 @@ class ScheduledDailyRunner:
                 })
 
                 # Risk Engine Evaluation
+                atr_series = compute_atr_series(valid_bars, 14)
+                latest_atr = atr_series[-1] if atr_series and atr_series[-1] is not None else None
                 open_syms = {p.symbol for p in ledger.get_open_positions()}
                 risk_dec = self.risk_engine.evaluate_entry_signal(
                     symbol=sym,
@@ -617,6 +621,7 @@ class ScheduledDailyRunner:
                     open_positions_Symbols=open_syms,
                     daily_realized_pnl_inr=ledger.get_daily_realized_pnl(session_date),
                     daily_unrealized_pnl_inr=ledger.get_daily_unrealized_pnl(),
+                    atr_value=latest_atr,
                 )
 
                 risk_rec = RiskDecisionRecord(

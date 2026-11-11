@@ -10,6 +10,7 @@ from tests.unit import test_candle_cache as t_cache
 from tests.unit import test_risk_and_costs as t_risk
 from tests.unit import test_angel_provider as t_angel
 from tests.unit import test_notifications as t_notify
+from tests.unit import test_volatility_and_regime as t_vol
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.backtest import test_backtester_and_lookahead as t_bt
@@ -63,6 +64,11 @@ def run_all() -> int:
           t_notify.test_message_formatting_integrity,
           t_notify.test_send_message_sync_mocked,
           t_notify.test_send_message_background_returns_immediately,
+      ]),
+      ("unit/test_volatility_and_regime.py", [
+          t_vol.test_sector_concentration_guard,
+          t_vol.test_atr_adjusted_volatility_sizing,
+          t_vol.test_rvol_threshold_filtering,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

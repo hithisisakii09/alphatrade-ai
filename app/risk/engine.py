@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, time
 from decimal import Decimal, ROUND_DOWN
+from typing import Any
 from app.core.clock import to_ist
 from app.core.config import RiskProfileConfig
 from app.core.money import round_paise, round_price, round_to_tick, to_decimal
@@ -51,9 +52,11 @@ class RiskEngine:
       entry_cutoff_ist: str = "14:30",
       liquidation_start_ist: str = "15:00",
       liquidation_deadline_ist: str = "15:15",
+      registry: Any = None,
   ):
     self.profile = profile
     self.cost_engine = cost_engine
+    self.registry = registry
     self.entry_cutoff = time.fromisoformat(entry_cutoff_ist)
     self.liquidation_start = time.fromisoformat(liquidation_start_ist)
     self.liquidation_deadline = time.fromisoformat(liquidation_deadline_ist)
@@ -208,6 +211,7 @@ class RiskEngine:
       daily_unrealized_pnl_inr: Decimal,
       data_is_fresh: bool = True,
       ledger_is_reconciled: bool = True,
+      atr_value: Decimal | None = None,
   ) -> RiskApprovalDecision:
     """Evaluates a candidate strategy signal against all deterministic risk and portfolio limits."""
     cap = to_decimal(current_capital_inr)
@@ -295,10 +299,40 @@ class RiskEngine:
           explanation=f"Rejected: Maximum open positions ({self.profile.max_open_positions}) reached.",
       )
 
+    # 5b. Maximum sector concentration check
+    if self.registry and hasattr(self.registry, "get_sector"):
+      cand_sector = self.registry.get_sector(symbol)
+      if cand_sector and cand_sector != "GENERAL":
+        max_sector_pos = getattr(self.profile, "max_positions_per_sector", 1)
+        same_sector_count = sum(
+            1 for s in open_positions_Symbols if self.registry.get_sector(s) == cand_sector
+        )
+        if same_sector_count >= max_sector_pos:
+          return RiskApprovalDecision(
+              approved=False,
+              reason_code="SECTOR_CONCENTRATION_LIMIT_EXCEEDED",
+              approved_quantity=0,
+              initial_stop_price=None,
+              trailing_activation_price=None,
+              risk_budget_inr=risk_budget,
+              estimated_roundtrip_cost_inr=Decimal("0.00"),
+              cost_to_risk_ratio=Decimal("0.0000"),
+              explanation=(
+                  f"Rejected: Maximum open positions ({max_sector_pos}) for sector "
+                  f"'{cand_sector}' already reached."
+              ),
+          )
+
     # 6. Position sizing arithmetic
     entry_p = to_decimal(candidate_entry_price)
     levels = self.compute_exit_levels(entry_p, orb_low=orb_low)
-    if levels.stop_distance_per_share <= Decimal("0"):
+    effective_stop_dist = levels.stop_distance_per_share
+    if atr_value is not None and atr_value > Decimal("0"):
+      atr_mult = getattr(self.profile, "atr_volatility_multiplier", Decimal("1.5"))
+      vol_stop_dist = round_price(atr_value * atr_mult)
+      effective_stop_dist = max(levels.stop_distance_per_share, vol_stop_dist)
+
+    if effective_stop_dist <= Decimal("0"):
       return RiskApprovalDecision(
           approved=False,
           reason_code="INVALID_STOP_DISTANCE",
@@ -311,7 +345,7 @@ class RiskEngine:
           explanation="Rejected: Stop distance per share must be > 0.",
       )
 
-    qty_by_risk = int((risk_budget / levels.stop_distance_per_share).to_integral_value(rounding=ROUND_DOWN))
+    qty_by_risk = int((risk_budget / effective_stop_dist).to_integral_value(rounding=ROUND_DOWN))
     max_total_deployable = round_paise(cap * self.profile.max_capital_deployed_pct)
     remaining_exposure_cap = max(Decimal("0.00"), max_total_deployable - to_decimal(deployed_exposure_inr))
     max_single_pos_cap = round_paise(cap * self.profile.max_single_position_pct)
