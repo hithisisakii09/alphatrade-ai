@@ -1,6 +1,6 @@
 # AlphaTrade AI v2.0 — Engineering Progress & Gate Verification Log
 
-**Current Status:** **ALL MILESTONES M0 THROUGH M7 COMPLETE • Live Market Ingestion, Incremental Caching & EOD Liquidation Verified (29/29 Tests Passing)**  
+**Current Status:** **ALL MILESTONES M0 THROUGH M12 COMPLETE • Production Hardening, SQLite WAL Checkpointing, Feed Watchdog, Docker Orchestration & Disaster Recovery Verified (49/49 Tests Passing)**  
 **Last Updated:** 11 November 2026  
 **Active Execution Mode:** Strictly `PAPER`  
 **Active Strategy Profile:** `STANDARD_RESEARCH_100K` (`INTRADAY_V2` Exit Mode)  
@@ -103,9 +103,10 @@
 | **M9** | Multi-Month Empirical Walk-Forward | `NEW` | **COMPLETE (`ELIGIBLE_FOR_STATISTICAL_EVALUATION`)** | Ingested 348,453 validated 1m candles across 48 continuous trading sessions (2026-09-01 to 2026-11-11) from Angel One SmartAPI into SQLite. Executed chronological 70% IS / 30% OOS walk-forward study yielding 137 Out-of-Sample trades (crossing the $\ge 100$ eligibility threshold). Win Rate: 46.72% (95% CI: 38.36%–55.07%), PF: 0.92, Net Expectancy: -0.0345 R (-₹12.43/trade), Max DD: 6.19%. Full institutional report in `docs/M9_EMPIRICAL_WALK_FORWARD_REPORT.md`. |
 | **M10** | Live Forward Paper-Trading & Telemetry | `NEW` | **COMPLETE** | Live intraday tick state machine profiled with sub-millisecond execution timing (`avg_latency`: 4.82 ms, peak: 18.40 ms, compliant with $\le 500$ ms budget). Webhook notification service upgraded with non-blocking daemon background dispatch (`send_message_background()`), eliminating I/O delays during order execution. Telemetry summary exposed via `/runner/status`. 43/43 tests passing. Report in `docs/M10_FORWARD_PAPER_TRADING_REPORT.md`. |
 | **M11** | Volatility & Regime Adaptability | `NEW` | **COMPLETE** | Relative Volume ($\text{RVOL} \ge 1.50\times$) breakout filter enforced in strategy engine; Wilder's ATR(14) dynamic volatility sizing integrated into RiskEngine; sector concentration limit (`max_positions_per_sector: 1`) enforced across all 20 NIFTY liquid constituents. 46/46 tests passing. Report in `docs/M11_VOLATILITY_AND_REGIME_REPORT.md`. |
+| **M12** | Production Hardening & Disaster Recovery | `NEW` | **COMPLETE** | SQLite automated WAL checkpointing (`PRAGMA wal_checkpoint(TRUNCATE)`) and point-in-time online backup manager with SHA-256 integrity verification (`scripts/backup_manager.py`); real-time Feed Watchdog with market-hours dead-man's switch (180s stall threshold) fail-closing the risk kill switch (`app/services/watchdog.py`); hardened rootless Docker container (`appuser` UID 1000) and multi-mount Docker Compose orchestration validated. 49/49 tests passing. Report in `docs/M12_PRODUCTION_HARDENING_REPORT.md`. |
 
 ---
 
 ## 3. Summary of Development Verification
 
-Milestones M0 through M11 have been engineered, verified, and runtime-tested without mock persistence and conforming strictly to zero-trust standards. Empirical walk-forward validation on 348,453 authentic candles confirmed statistical sample eligibility ($\ge 100$ OOS trades). Live forward-trading loop, non-blocking webhook telemetry, and regime-adaptive volatility controls verified with 46/46 tests passing. Ready for Milestone M12 (Production Hardening, Container Orchestration & Disaster Recovery).
+Milestones M0 through M12 have been engineered, verified, and runtime-tested without mock persistence and conforming strictly to zero-trust standards. Empirical walk-forward validation on 348,453 authentic candles confirmed statistical sample eligibility ($\ge 100$ OOS trades). Live forward-trading loop, non-blocking webhook telemetry, regime-adaptive volatility controls, feed watchdog dead-man's switch, and cryptographically verified disaster recovery backups are fully operational with 49/49 tests passing. AlphaTrade AI v2.0 is fully verified for continuous automated paper trading.

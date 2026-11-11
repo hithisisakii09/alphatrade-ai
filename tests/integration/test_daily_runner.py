@@ -11,7 +11,7 @@ from app.services.daily_runner import ScheduledDailyRunner, generate_realistic_s
 def test_scheduled_daily_runner_jobs_and_lifecycle():
   runner = ScheduledDailyRunner()
   jobs = runner.get_jobs_summary()
-  assert len(jobs) == 6
+  assert len(jobs) == 8
   job_ids = {j["id"] for j in jobs}
   assert "nse_pre_market_0900" in job_ids
   assert "nse_market_open_0915" in job_ids
@@ -19,6 +19,8 @@ def test_scheduled_daily_runner_jobs_and_lifecycle():
   assert "nse_entry_cutoff_1430" in job_ids
   assert "nse_eod_liquidation_1500" in job_ids
   assert "nse_session_close_1535" in job_ids
+  assert "feed_watchdog_30s" in job_ids
+  assert "nse_wal_checkpoint_1540" in job_ids
 
   # Test pre-market check execution
   res = runner.job_pre_market_check()
@@ -27,10 +29,10 @@ def test_scheduled_daily_runner_jobs_and_lifecycle():
 
   # Test dynamic enabling/disabling of 1-minute intraday tick job
   runner.enable_intraday_tick_job()
-  assert len(runner.get_jobs_summary()) == 7
+  assert len(runner.get_jobs_summary()) == 9
   assert "nse_intraday_tick" in {j["id"] for j in runner.get_jobs_summary()}
   runner.disable_intraday_tick_job()
-  assert len(runner.get_jobs_summary()) == 6
+  assert len(runner.get_jobs_summary()) == 8
 
   # Test lifecycle start/stop
   runner.start()
@@ -46,14 +48,19 @@ def test_runner_status_fastapi_endpoint(monkeypatch=None):
   assert resp.status_code == 200
   data = resp.json()
   assert "is_running" in data
-  assert data["jobs_count"] == 6
-  assert len(data["jobs"]) == 6
+  assert data["jobs_count"] == 8
+  assert len(data["jobs"]) == 8
+  assert "watchdog" in data
 
   # Test trigger tick endpoint (mock tick to avoid live network delay during test run)
   with patch("app.api.routes._daily_runner.job_intraday_tick", return_value={"status": "SUCCESS", "mock": True}):
     tick_resp = client.post("/runner/tick")
     assert tick_resp.status_code == 200
     assert tick_resp.json()["status"] == "SUCCESS"
+
+  from app.api.routes import _daily_runner
+  if _daily_runner and _daily_runner.is_running:
+    _daily_runner.stop()
 
 
 def test_intraday_tick_breakout_execution_and_eod_liquidation(tmp_path=None):

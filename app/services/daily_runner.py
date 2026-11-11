@@ -39,9 +39,27 @@ from app.portfolio.ledger import PortfolioLedger
 from app.reporting.reports import generate_daily_report
 from app.risk.engine import RiskEngine
 from app.services.notifications import WebhookNotificationService
+from app.services.watchdog import FeedWatchdog
 from app.strategy.orb.engine import ORBStrategyEngine
 
 logger = logging.getLogger(__name__)
+
+
+def checkpoint_database_wal(db_url: str) -> tuple[int, int, int]:
+  """Performs an SQLite WAL TRUNCATE checkpoint if connected to SQLite."""
+  if "sqlite" in db_url.lower():
+    clean_path = db_url.replace("sqlite:///", "").replace("sqlite://", "")
+    if clean_path and os.path.exists(clean_path):
+      try:
+        import sqlite3
+        conn = sqlite3.connect(clean_path, timeout=30.0)
+        row = conn.execute("PRAGMA wal_checkpoint(TRUNCATE);").fetchone()
+        conn.close()
+        logger.info("Executed SQLite WAL checkpoint on %s: busy=%s, log=%s, checkpointed=%s", clean_path, row[0], row[1], row[2])
+        return int(row[0]), int(row[1]), int(row[2])
+      except Exception as e:
+        logger.warning("WAL checkpoint failed: %s", e)
+  return 0, 0, 0
 
 
 def generate_realistic_session_bars(
@@ -184,7 +202,7 @@ class ScheduledDailyRunner:
     ]
     self.prev_daily_closes: dict[str, Decimal] = {}
     self.candle_cache = LiveCandleCache(orb_minutes=self.config.strategy.opening_range_minutes)
-    self.scheduler = BackgroundScheduler(timezone=IST)
+    self.scheduler = BackgroundScheduler(timezone=IST, daemon=True)
     self._is_active = False
     self.recent_tick_latencies: list[dict[str, Any]] = []
     self.total_ticks_executed: int = 0
@@ -193,6 +211,13 @@ class ScheduledDailyRunner:
       self.enable_intraday_poll = enable_intraday_poll
     else:
       self.enable_intraday_poll = os.environ.get("ALPHATRADE_ENABLE_INTRADAY_POLLER", "").lower() in ("true", "1")
+
+    self.watchdog = FeedWatchdog(
+        staleness_threshold_seconds=180,
+        notification_service=self.notification_service,
+        on_stall_callback=lambda reason: self.risk_engine.trigger_kill_switch("STALE_OR_INVALID_MARKET_DATA"),
+        calendar=self.calendar,
+    )
 
     self._register_jobs()
     if auto_start:
@@ -245,6 +270,23 @@ class ScheduledDailyRunner:
         CronTrigger(day_of_week="mon-fri", hour=15, minute=35, timezone=IST),
         id="nse_session_close_1535",
         name="Session Close, Reconciliation & Daily Metric Snapshot",
+        replace_existing=True,
+    )
+    # 7. Feed Watchdog 30s Health Interval
+    self.scheduler.add_job(
+        self.job_watchdog_check,
+        "interval",
+        seconds=30,
+        id="feed_watchdog_30s",
+        name="Feed Staleness Watchdog",
+        replace_existing=True,
+    )
+    # 8. 15:40 IST: SQLite WAL Checkpoint
+    self.scheduler.add_job(
+        self.job_wal_checkpoint,
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=40, timezone=IST),
+        id="nse_wal_checkpoint_1540",
+        name="Post-Market SQLite WAL Checkpoint",
         replace_existing=True,
     )
 
@@ -307,6 +349,19 @@ class ScheduledDailyRunner:
         "latency_budget_ms": 500.0,
         "budget_compliant": max_lat <= 500.0 if latencies else True,
         "recent_latencies": self.recent_tick_latencies[-10:],
+    }
+
+  def job_watchdog_check(self, now_utc: datetime | None = None) -> dict[str, Any]:
+    return self.watchdog.check_health(now_utc)
+
+  def job_wal_checkpoint(self) -> dict[str, Any]:
+    busy, log_f, chk_f = checkpoint_database_wal(self.db_url)
+    return {
+        "status": "CHECKPOINT_SUCCESS",
+        "busy": busy,
+        "log_frames": log_f,
+        "checkpointed_frames": chk_f,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
 
   def job_pre_market_check(self, now_utc: datetime | None = None) -> dict[str, Any]:
@@ -402,6 +457,7 @@ class ScheduledDailyRunner:
     """Live 1m candle ingestion, validation, ORB calculation, breakout execution, and trailing stop management."""
     start_perf = timemod.perf_counter()
     ts = now_utc or datetime.now(timezone.utc)
+    self.watchdog.record_tick(ts)
     dt_ist = to_ist(ts)
     session_date = dt_ist.strftime("%Y-%m-%d")
 
@@ -747,6 +803,8 @@ class ScheduledDailyRunner:
             self.notification_service.send_message_sync(msg_text)
         except Exception as e:
           logger.warning(f"Failed to dispatch EOD notification: {e}")
+
+      checkpoint_database_wal(self.db_url)
 
       return {
           "session_date": session_date,

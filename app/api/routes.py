@@ -29,11 +29,13 @@ _daily_runner = ScheduledDailyRunner(config=_cfg, auto_start=True)
 
 @router.get("/health")
 def get_health():
+  watchdog_health = _daily_runner.watchdog.check_health()
   return {
-      "status": "OK",
+      "status": "OK" if watchdog_health["is_healthy"] else "DEGRADED",
       "version": "2.0.0",
       "execution_mode": _cfg.execution_mode,
       "active_risk_profile": _cfg.active_risk_profile,
+      "watchdog": watchdog_health,
   }
 
 
@@ -257,6 +259,7 @@ def get_runner_status():
       "jobs_count": len(_daily_runner.get_jobs_summary()),
       "jobs": _daily_runner.get_jobs_summary(),
       "telemetry": _daily_runner.get_telemetry_summary(),
+      "watchdog": _daily_runner.watchdog.check_health(),
   }
 
 

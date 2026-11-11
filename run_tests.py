@@ -13,6 +13,7 @@ from tests.unit import test_notifications as t_notify
 from tests.unit import test_volatility_and_regime as t_vol
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
+from tests.integration import test_production_hardening as t_hard
 from tests.backtest import test_backtester_and_lookahead as t_bt
 from tests.backtest import test_walk_forward_oos as t_oos
 from tests.backtest import test_research_provenance as t_prov
@@ -80,6 +81,11 @@ def run_all() -> int:
           lambda: t_runner.test_intraday_tick_breakout_execution_and_eod_liquidation(Path(tempfile.mkdtemp())),
           lambda: t_runner.test_tick_latency_profiling_and_telemetry_summary(Path(tempfile.mkdtemp())),
       ]),
+      ("integration/test_production_hardening.py", [
+          t_hard.test_wal_checkpoint_and_backup_creation_and_restore,
+          t_hard.test_watchdog_health_and_dead_man_switch,
+          t_hard.test_daily_runner_production_hardening_jobs,
+      ]),
       ("backtest/test_backtester_and_lookahead.py", [
           t_bt.test_deliberate_lookahead_bug_caught,
           lambda: t_bt.test_reproducible_end_to_end_benchmark_and_api_routes(Path(tempfile.mkdtemp())),
@@ -118,14 +124,20 @@ def run_all() -> int:
       name = getattr(fn, "__name__", "test_fn")
       try:
         fn()
-        print(f"[PASS] {suite_name}::{name}")
+        print(f"[PASS] {suite_name}::{name}", flush=True)
         passed += 1
       except Exception:
-        print(f"[FAIL] {suite_name}::{name}")
+        print(f"[FAIL] {suite_name}::{name}", flush=True)
         traceback.print_exc()
         failed += 1
 
-  print(f"\n=== TEST SUMMARY: {passed} passed, {failed} failed ===")
+  print(f"\n=== TEST SUMMARY: {passed} passed, {failed} failed ===", flush=True)
+  try:
+    from app.api.routes import _daily_runner
+    if _daily_runner and _daily_runner.is_running:
+      _daily_runner.stop()
+  except Exception:
+    pass
   return 0 if failed == 0 else 1
 
 
