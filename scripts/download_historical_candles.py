@@ -17,6 +17,9 @@ from app.data.models import CandleBar
 from app.data.providers import AngelSmartAPIDataProvider
 from app.data.validator import CandleIngestionValidator
 
+# Ensure .env is loaded before provider initialization
+_load_env_file()
+
 
 def download_historical_candles(
     symbols: list[str],
