@@ -65,6 +65,14 @@
 - **Complete Test Suite Passing (28/28 tests, exit code 0):**
   - `pytest -v`: **28 passed, 0 failed** in 24.36s.
   - `run_tests.py`: **28 passed, 0 failed** in 19.12s.
+  - Fully migrated to Pydantic v2 `@field_validator` syntax with zero console deprecation warnings.
+- **Production Packaging, CI/CD & Operations Complete:**
+  - Built lean 74.7 MB production Docker image (`Dockerfile`) based on `python:3.12-slim` with Asia/Kolkata timezone and health check.
+  - Created `docker-compose.yml` with persistent volume mounts for SQLite and session caching.
+  - Implemented GitHub Actions CI pipeline in `.github/workflows/ci.yml` verifying tests and Docker builds on push/PR.
+  - Created unified operational pre-flight health audit script in `scripts/audit_system_health.py` validating 8/8 subsystems.
+  - Added standalone webhook notification test harness in `scripts/test_webhook_alert.py`.
+  - Added interactive manual evaluation tick button (`⚡ Run 1m Market Tick`) and 20-token master view to live HTML dashboard.
 
 ---
 
