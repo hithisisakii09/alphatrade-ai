@@ -50,6 +50,7 @@ def run_all() -> int:
           t_angel.test_angel_response_parsing_to_candle_bars,
           t_angel.test_angel_auth_error_when_credentials_missing,
           t_angel.test_get_data_provider_factory,
+          lambda: t_angel.test_angel_session_caching(Path(tempfile.mkdtemp())),
       ]),
       ("unit/test_notifications.py", [
           t_notify.test_notification_service_configuration,

@@ -95,3 +95,18 @@ def test_get_data_provider_factory():
   assert isinstance(prov, AngelSmartAPIDataProvider)
   assert prov.provider_name == "ANGEL_SMARTAPI"
 
+
+def test_angel_session_caching(tmp_path):
+  provider = AngelSmartAPIDataProvider(api_key="TEST_KEY", client_code="S12345", password="")
+  provider.cache_dir = str(tmp_path)
+  provider.jwt_token = "MOCK_JWT_TOKEN_123"
+  provider.feed_token = "MOCK_FEED_TOKEN_456"
+  provider._save_cached_session()
+
+  # Create new provider instance pointing to same cache directory
+  new_provider = AngelSmartAPIDataProvider(api_key="TEST_KEY", client_code="S12345", password="")
+  new_provider.cache_dir = str(tmp_path)
+  new_provider._load_cached_session()
+  assert new_provider.jwt_token == "MOCK_JWT_TOKEN_123"
+  assert new_provider.feed_token == "MOCK_FEED_TOKEN_456"
+

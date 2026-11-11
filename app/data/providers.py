@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import hmac
+import json
 import os
 import struct
 import time
@@ -123,6 +124,44 @@ class AngelSmartAPIDataProvider:
     self.feed_token: str | None = None
     self.refresh_token: str | None = None
     self._rate_limiter = _RateLimiter(min_interval_sec=0.35)
+    self.cache_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        ".cache",
+    )
+    if not self.jwt_token:
+      self._load_cached_session()
+
+  def _load_cached_session(self) -> None:
+    session_file = os.path.join(self.cache_dir, "angel_session.json")
+    if os.path.exists(session_file):
+      try:
+        with open(session_file, "r") as f:
+          data = json.load(f)
+        today_ist = to_ist(datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+        if data.get("session_date") == today_ist and data.get("client_code") == self.client_code:
+          self.jwt_token = data.get("jwt_token")
+          self.feed_token = data.get("feed_token")
+          self.refresh_token = data.get("refresh_token")
+      except Exception:
+        pass
+
+  def _save_cached_session(self) -> None:
+    os.makedirs(self.cache_dir, exist_ok=True)
+    session_file = os.path.join(self.cache_dir, "angel_session.json")
+    today_ist = to_ist(datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+    payload = {
+        "session_date": today_ist,
+        "client_code": self.client_code,
+        "jwt_token": self.jwt_token,
+        "feed_token": self.feed_token,
+        "refresh_token": self.refresh_token,
+        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+      with open(session_file, "w") as f:
+        json.dump(payload, f, indent=2)
+    except Exception:
+      pass
 
   def resolve_symbol_token(self, symbol: str) -> str | None:
     return ANGEL_SYMBOL_TOKENS.get(symbol.upper())
@@ -173,6 +212,7 @@ class AngelSmartAPIDataProvider:
       self.jwt_token = tokens.get("jwtToken")
       self.feed_token = tokens.get("feedToken")
       self.refresh_token = tokens.get("refreshToken")
+      self._save_cached_session()
       return self.jwt_token
 
   def parse_angel_response(self, symbol: str, raw_candles: list[list]) -> list[CandleBar]:
