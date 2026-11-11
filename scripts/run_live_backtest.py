@@ -43,6 +43,15 @@ def run_backtest_from_db(
   prev_closes: dict[str, Decimal] = {}
 
   with SessionLocal() as db:
+    if symbols == ["ALL"]:
+      symbols = [
+          r[0]
+          for r in db.conn.cursor()
+          .execute("SELECT DISTINCT symbol FROM market_candles ORDER BY symbol")
+          .fetchall()
+      ]
+      print(f"[*] Expanded 'ALL' to {len(symbols)} universe constituents in database.")
+
     for sym in symbols:
       recs = (
           db.query(MarketCandleRecord)
