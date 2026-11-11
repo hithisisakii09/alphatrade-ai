@@ -123,7 +123,13 @@ class AngelSmartAPIDataProvider:
     self.jwt_token = jwt_token or os.environ.get("ANGEL_JWT_TOKEN")
     self.feed_token: str | None = None
     self.refresh_token: str | None = None
-    self._rate_limiter = _RateLimiter(min_interval_sec=0.35)
+    self._rate_limiter = _RateLimiter(min_interval_sec=1.0)
+    self.cache_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        ".cache",
+    )
+    if not self.jwt_token:
+      self._load_cached_session()
     self.cache_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         ".cache",
@@ -288,17 +294,19 @@ class AngelSmartAPIDataProvider:
       try:
         with httpx.Client(timeout=15.0) as client:
           resp = client.post(url, json=payload, headers=headers)
-          if resp.status_code == 429:
-            time.sleep(1.0 * (2**attempt))
+          if resp.status_code == 429 or (resp.status_code == 403 and "exceeding access rate" in resp.text.lower()):
+            time.sleep(2.0 * (2**attempt))
             continue
-          if resp.status_code in (401, 403):
+          if resp.status_code == 401:
             if self.password and attempt == 0:
               self.login()
               headers["Authorization"] = (
                   self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
               )
               continue
-            raise ProviderAuthenticationError(f"Angel SmartAPI unauthorized ({resp.status_code}): {resp.text}")
+            raise ProviderAuthenticationError(f"Angel SmartAPI unauthorized (401): {resp.text}")
+          if resp.status_code == 403:
+            raise ProviderAuthenticationError(f"Angel SmartAPI forbidden (403): {resp.text}")
           resp.raise_for_status()
           data = resp.json()
           if not data.get("status"):

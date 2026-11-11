@@ -45,6 +45,11 @@ def main():
 
   # 2. Verify Symbol Token Resolution
   provider = AngelSmartAPIDataProvider()
+  if provider.jwt_token:
+    print(f"[*] Cached Session Token: ACTIVE for today ({provider.jwt_token[:15]}...)")
+  else:
+    print("[*] Cached Session Token: NONE (will login via API when needed)")
+
   print("\n[*] Verifying Liquid NIFTY Symbol Token Resolution:")
   for sym in ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN"]:
     token = provider.resolve_symbol_token(sym)
@@ -67,7 +72,7 @@ def main():
   print("[PASS] Contract parser validated: Exact Decimal arithmetic preserved.")
 
   # 4. Attempt Live Network Call if credentials exist
-  if jwt_token or password:
+  if provider.jwt_token or password:
     print("\n[*] Attempting live SmartAPI call for RELIANCE (1m candles)...")
     try:
       # Query verified trading session (08-Nov-2024 09:15 - 10:15 IST)
