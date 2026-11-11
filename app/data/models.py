@@ -1,8 +1,8 @@
-"""Pydantic data contracts for market candles, instrument metadata, and quality events (compatible with Pydantic v1 & v2)."""
+"""Pydantic data contracts for market candles, instrument metadata, and quality events."""
 
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from app.core.clock import ensure_utc
 from app.core.money import to_decimal
 
@@ -18,11 +18,13 @@ class CandleBar(BaseModel):
   volume: int
   source: str = "BROKER_API"
 
-  @validator("open", "high", "low", "close", pre=True)
+  @field_validator("open", "high", "low", "close", mode="before")
+  @classmethod
   def validate_decimal_no_float(cls, v):
     return to_decimal(v)
 
-  @validator("timestamp_utc", pre=True)
+  @field_validator("timestamp_utc", mode="before")
+  @classmethod
   def validate_tz(cls, v):
     if isinstance(v, str):
       v = datetime.fromisoformat(v)
@@ -40,7 +42,8 @@ class InstrumentMeta(BaseModel):
   eligible: bool = True
   prev_close: Decimal | None = None
 
-  @validator("tick_size", "price_band_pct", "median_daily_turnover_cr", pre=True)
+  @field_validator("tick_size", "price_band_pct", "median_daily_turnover_cr", mode="before")
+  @classmethod
   def validate_dec(cls, v):
     return to_decimal(v)
 
