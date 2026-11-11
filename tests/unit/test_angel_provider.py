@@ -35,6 +35,20 @@ def test_angel_symbol_token_resolution():
   assert provider.resolve_symbol_token("HDFCBANK") == "1333"
   assert provider.resolve_symbol_token("ICICIBANK") == "4963"
   assert provider.resolve_symbol_token("SBIN") == "3045"
+  assert provider.resolve_symbol_token("BHARTIARTL") == "10604"
+  assert provider.resolve_symbol_token("ITC") == "1660"
+  assert provider.resolve_symbol_token("KOTAKBANK") == "1922"
+  assert provider.resolve_symbol_token("LT") == "11483"
+  assert provider.resolve_symbol_token("AXISBANK") == "5900"
+  assert provider.resolve_symbol_token("HINDUNILVR") == "1394"
+  assert provider.resolve_symbol_token("BAJFINANCE") == "317"
+  assert provider.resolve_symbol_token("MARUTI") == "10999"
+  assert provider.resolve_symbol_token("TITAN") == "3506"
+  assert provider.resolve_symbol_token("SUNPHARMA") == "3351"
+  assert provider.resolve_symbol_token("TATAMOTORS") == "3456"
+  assert provider.resolve_symbol_token("NTPC") == "11630"
+  assert provider.resolve_symbol_token("POWERGRID") == "14977"
+  assert provider.resolve_symbol_token("TATASTEEL") == "3499"
   assert provider.resolve_symbol_token("UNKNOWN_XYZ") is None
 
 

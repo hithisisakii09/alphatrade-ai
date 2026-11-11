@@ -63,6 +63,106 @@
       "eligible": true
     },
     {
+      "symbol": "BHARTIARTL",
+      "exchange": "NSE",
+      "isin": "INE397D01024",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1280.0",
+      "eligible": true
+    },
+    {
+      "symbol": "ITC",
+      "exchange": "NSE",
+      "isin": "INE154A01025",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "980.0",
+      "eligible": true
+    },
+    {
+      "symbol": "LT",
+      "exchange": "NSE",
+      "isin": "INE018A01030",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1150.0",
+      "eligible": true
+    },
+    {
+      "symbol": "AXISBANK",
+      "exchange": "NSE",
+      "isin": "INE238A01034",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1050.0",
+      "eligible": true
+    },
+    {
+      "symbol": "KOTAKBANK",
+      "exchange": "NSE",
+      "isin": "INE237A01028",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "890.0",
+      "eligible": true
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "exchange": "NSE",
+      "isin": "INE030A01027",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "780.0",
+      "eligible": true
+    },
+    {
+      "symbol": "BAJFINANCE",
+      "exchange": "NSE",
+      "isin": "INE296A01024",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "1220.0",
+      "eligible": true
+    },
+    {
+      "symbol": "MARUTI",
+      "exchange": "NSE",
+      "isin": "INE585B01010",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "840.0",
+      "eligible": true
+    },
+    {
+      "symbol": "TITAN",
+      "exchange": "NSE",
+      "isin": "INE280A01028",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "760.0",
+      "eligible": true
+    },
+    {
+      "symbol": "SUNPHARMA",
+      "exchange": "NSE",
+      "isin": "INE044A01036",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "690.0",
+      "eligible": true
+    },
+    {
       "symbol": "TATAMOTORS",
       "exchange": "NSE",
       "isin": "INE155A01022",
@@ -70,6 +170,36 @@
       "price_band_pct": "10.0",
       "is_fno": true,
       "median_daily_turnover_cr": "1420.0",
+      "eligible": true
+    },
+    {
+      "symbol": "NTPC",
+      "exchange": "NSE",
+      "isin": "INE733E01010",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "620.0",
+      "eligible": true
+    },
+    {
+      "symbol": "POWERGRID",
+      "exchange": "NSE",
+      "isin": "INE752E01010",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "580.0",
+      "eligible": true
+    },
+    {
+      "symbol": "TATASTEEL",
+      "exchange": "NSE",
+      "isin": "INE081A01020",
+      "tick_size": "0.05",
+      "price_band_pct": "10.0",
+      "is_fno": true,
+      "median_daily_turnover_cr": "810.0",
       "eligible": true
     },
     {
