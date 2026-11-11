@@ -180,12 +180,19 @@ def get_portfolio():
   with _SessionLocal() as db:
     ledger = PortfolioLedger(db, prof.reference_capital)
     reconciled, msg = ledger.reconcile()
+    cash_bal = ledger.get_cash_balance()
+    deployed = ledger.get_deployed_exposure()
+    unrealized = ledger.get_daily_unrealized_pnl()
+    net_equity = cash_bal + deployed + unrealized
     return {
         "starting_capital_inr": str(ledger.starting_capital_inr),
-        "cash_balance_inr": str(ledger.get_cash_balance()),
-        "deployed_exposure_inr": str(ledger.get_deployed_exposure()),
+        "cash_balance_inr": str(cash_bal),
+        "deployed_exposure_inr": str(deployed),
+        "unrealized_pnl_inr": str(unrealized),
+        "net_equity_inr": str(net_equity),
         "reconciled": reconciled,
         "reconciliation_message": msg,
+        "candle_cache": _daily_runner.candle_cache.get_cache_stats(),
     }
 
 

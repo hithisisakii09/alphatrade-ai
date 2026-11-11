@@ -289,19 +289,29 @@
           <div class="sub">Profile: STANDARD_RESEARCH_100K</div>
         </div>
         <div class="card">
-          <h3>Current Cash Balance</h3>
-          <div id="kpi-cash-balance" class="val" style="color: var(--navy);">₹1,01,371.35</div>
+          <h3>Live Cash Balance</h3>
+          <div id="kpi-cash-balance" class="val" style="color: var(--navy);">₹1,00,000.00</div>
           <div class="sub">Available unallocated trading cash</div>
         </div>
         <div class="card">
-          <h3>Session Realized P&amp;L</h3>
-          <div id="kpi-realized-pnl" class="val" style="color: var(--green);">+₹1,371.35</div>
-          <div class="sub">Net of statutory taxes and broker fees</div>
+          <h3>Deployed Exposure</h3>
+          <div id="kpi-deployed-exposure" class="val" style="color: var(--amber);">₹0.00</div>
+          <div class="sub">Active margin in open positions</div>
+        </div>
+        <div class="card">
+          <h3>Live Net Equity (MTM)</h3>
+          <div id="kpi-net-equity" class="val" style="color: var(--green);">₹1,00,000.00</div>
+          <div class="sub">Cash + Deployed + Unrealized MTM</div>
+        </div>
+        <div class="card">
+          <h3>Live Candle Cache</h3>
+          <div id="kpi-cache-stats" class="val" style="color: var(--teal);">100% Hit Rate</div>
+          <div class="sub"><span id="sub-cache-bars">0 bars cached</span> across session</div>
         </div>
         <div class="card">
           <h3>Double-Entry Ledger</h3>
           <div id="kpi-ledger-status" class="val"><span class="pill ok">RECONCILED_OK</span></div>
-          <div class="sub">Zero floating-point drift (Exact Decimal arithmetic)</div>
+          <div class="sub">Exact Decimal arithmetic (0 drift)</div>
         </div>
       </div>
 
@@ -536,6 +546,16 @@
       if (portfolio) {
         document.getElementById('kpi-starting-capital').textContent = '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
         document.getElementById('kpi-cash-balance').textContent = '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (portfolio.deployed_exposure_inr) {
+          document.getElementById('kpi-deployed-exposure').textContent = '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        }
+        if (portfolio.net_equity_inr) {
+          document.getElementById('kpi-net-equity').textContent = '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        }
+        if (portfolio.candle_cache) {
+          document.getElementById('kpi-cache-stats').textContent = `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`;
+          document.getElementById('sub-cache-bars').textContent = `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`;
+        }
         const recPill = portfolio.reconciled 
           ? '<span class="pill ok">RECONCILED_OK</span>' 
           : '<span class="pill danger">MISMATCH</span>';

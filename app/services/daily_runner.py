@@ -21,6 +21,7 @@ from app.core.database import (
 )
 from app.core.execution_guard import assert_paper_mode
 from app.core.money import round_paise, to_decimal
+from app.data.cache import LiveCandleCache
 from app.data.instruments import InstrumentRegistry
 from app.data.models import CandleBar
 from app.data.providers import MarketDataProvider, get_data_provider
@@ -179,6 +180,7 @@ class ScheduledDailyRunner:
         "AXISBANK",
     ]
     self.prev_daily_closes: dict[str, Decimal] = {}
+    self.candle_cache = LiveCandleCache(orb_minutes=self.config.strategy.opening_range_minutes)
     self.scheduler = BackgroundScheduler(timezone=IST)
     self._is_active = False
 
@@ -423,6 +425,9 @@ class ScheduledDailyRunner:
     entry_cutoff = datetime.strptime(self.config.strategy.entry_cutoff_ist, "%H:%M").time()
     target_symbols = symbols or (list(custom_bars_by_symbol.keys()) if custom_bars_by_symbol else self.symbols_universe)
 
+    # Check session rollover for live candle cache
+    self.candle_cache.check_session_rollover(session_date)
+
     with self.SessionLocal() as db:
       ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
       broker = PaperBroker(
@@ -432,23 +437,36 @@ class ScheduledDailyRunner:
 
       for sym in target_symbols:
         try:
-          # 1. Ingest 1m candles
+          # 1. Ingest 1m candles with Live Incremental Caching
           if custom_bars_by_symbol and sym in custom_bars_by_symbol:
             bars = custom_bars_by_symbol[sym]
+            valid_bars = [b for b in bars if self.validator.validate_bar(b)[0]]
+            self.candle_cache.update_bars(sym, valid_bars)
           else:
-            start_utc = ist_datetime(dt_ist.year, dt_ist.month, dt_ist.day, 9, 15)
-            bars = self.provider.fetch_1m_candles(sym, start_utc, ts)
+            cached_last_ts = self.candle_cache.get_last_timestamp(sym)
+            if cached_last_ts is not None:
+              fetch_start_utc = cached_last_ts + timedelta(minutes=1)
+              if fetch_start_utc <= ts:
+                new_raw = self.provider.fetch_1m_candles(sym, fetch_start_utc, ts)
+                new_valid = [
+                    b
+                    for b in new_raw
+                    if self.validator.validate_bar(b)[0]
+                    and sym not in self.validator.quarantined_symbols
+                ]
+                self.candle_cache.update_bars(sym, new_valid)
+            else:
+              start_utc = ist_datetime(dt_ist.year, dt_ist.month, dt_ist.day, 9, 15)
+              raw_bars = self.provider.fetch_1m_candles(sym, start_utc, ts)
+              valid_bars = [
+                  b
+                  for b in raw_bars
+                  if self.validator.validate_bar(b)[0]
+                  and sym not in self.validator.quarantined_symbols
+              ]
+              self.candle_cache.update_bars(sym, valid_bars)
 
-          if not bars:
-            continue
-
-          # 2. Validate bars
-          valid_bars: list[CandleBar] = []
-          for b in bars:
-            v_ok, _ = self.validator.validate_bar(b)
-            if v_ok and sym not in self.validator.quarantined_symbols:
-              valid_bars.append(b)
-
+          valid_bars = self.candle_cache.get_bars(sym)
           if not valid_bars:
             continue
 
@@ -636,6 +654,19 @@ class ScheduledDailyRunner:
           summary["errors"].append({"symbol": sym, "error": str(sym_err)})
 
       summary["open_positions_count"] = len(ledger.get_open_positions())
+
+      # Live Mark-to-Market valuation, cash balance & equity snapshot
+      mark_prices = {
+          sym: self.candle_cache.get_latest_price(sym)
+          for sym in target_symbols
+          if self.candle_cache.get_latest_price(sym) is not None
+      }
+      snap = ledger.take_snapshot(ts, mark_prices=mark_prices)
+      summary["live_cash_inr"] = str(snap.cash_balance_inr)
+      summary["deployed_exposure_inr"] = str(snap.deployed_exposure_inr)
+      summary["unrealized_pnl_inr"] = str(snap.unrealized_pnl_inr)
+      summary["net_equity_inr"] = str(snap.net_equity_inr)
+      summary["candle_cache_stats"] = self.candle_cache.get_cache_stats()
       return summary
 
   def job_reconcile_and_report(self, now_utc: datetime | None = None) -> dict[str, Any]:
