@@ -304,11 +304,6 @@
           <div class="sub">Cash + Deployed + Unrealized MTM</div>
         </div>
         <div class="card">
-          <h3>Realized P&amp;L (Today)</h3>
-          <div id="kpi-realized-pnl" class="val" style="color: var(--green);">₹0.00</div>
-          <div class="sub">Closed positions net of statutory friction</div>
-        </div>
-        <div class="card">
           <h3>Live Candle Cache</h3>
           <div id="kpi-cache-stats" class="val" style="color: var(--teal);">100% Hit Rate</div>
           <div class="sub"><span id="sub-cache-bars">0 bars cached</span> across session</div>
@@ -384,6 +379,16 @@
           <div class="sub">Max daily loss cap: 1.5% (-₹1,500 on 100K)</div>
         </div>
         <div class="card">
+          <h3>Feed Watchdog (Dead-Man)</h3>
+          <div id="kpi-watchdog-status" class="val"><span class="pill ok">HEALTHY</span></div>
+          <div class="sub"><span id="sub-watchdog-details">180s timeout • Market hours active</span></div>
+        </div>
+        <div class="card">
+          <h3>Regime &amp; Sector Limits</h3>
+          <div class="val" style="color:var(--teal);">RVOL &ge; 1.50&times;</div>
+          <div class="sub">1.5&times; ATR sizing • Max 1 position per sector</div>
+        </div>
+        <div class="card">
           <h3>Cost-to-Risk Gate</h3>
           <div class="val">&le; 15.0% of 1R</div>
           <div class="sub">Rejects breakouts when fees + slippage exceed 15% edge</div>
@@ -401,34 +406,39 @@
       <div class="kpi-grid">
         <div class="card">
           <h3>Scheduler State</h3>
-          <div id="kpi-runner-state" class="val">CONFIGURED</div>
+          <div id="kpi-runner-state" class="val"><span class="pill ok">RUNNING</span></div>
           <div class="sub">APScheduler BackgroundScheduler (Asia/Kolkata)</div>
         </div>
         <div class="card">
           <h3>Registered Intraday Jobs</h3>
-          <div id="kpi-runner-jobs-count" class="val">6 Jobs</div>
-          <div class="sub">Pre-market, ORB formation, 1m tick, Cutoff, EOD close, Reconcile</div>
+          <div id="kpi-runner-jobs-count" class="val">8 Active Jobs</div>
+          <div class="sub">Watchdog, Ingestion, ORB, Cutoff, Liquidation, Checkpoint</div>
+        </div>
+        <div class="card">
+          <h3>Tick Latency Telemetry</h3>
+          <div id="kpi-runner-latency" class="val" style="color:var(--green);">0.0 ms</div>
+          <div class="sub"><span id="sub-runner-latency-budget">Budget: &le; 500 ms (COMPLIANT)</span></div>
+        </div>
+        <div class="card">
+          <h3>Disaster Recovery Checkpoint</h3>
+          <div class="val" style="color:var(--navy);">15:40 IST</div>
+          <div class="sub">Automated SQLite WAL TRUNCATE &amp; Checkpoint</div>
         </div>
       </div>
 
       <div class="section-card">
-        <h2>Intraday Automated Job Timeline</h2>
+        <h2>Intraday Automated Job Timeline &amp; Next Run Schedules</h2>
         <table>
           <thead>
             <tr>
               <th>Job ID</th>
               <th>Job Description</th>
-              <th>Cron Trigger</th>
-              <th>Target Action</th>
+              <th>Next Run Time (IST)</th>
+              <th>Trigger Type</th>
             </tr>
           </thead>
           <tbody id="runner-jobs-tbody">
-            <tr><td><code>nse_pre_market_0900</code></td><td>Pre-Market Calendar Verification</td><td>09:00 IST (Mon-Fri)</td><td>Checks holiday calendar &amp; special session status</td></tr>
-            <tr><td><code>nse_orb_formed_0930</code></td><td>Opening Range Formation</td><td>09:30 IST (Mon-Fri)</td><td>Computes 15m ORB High &amp; Low across liquid universe</td></tr>
-            <tr><td><code>nse_intraday_tick</code></td><td>Intraday 1m Tick &amp; 5m Signal Evaluation</td><td>09:31–14:29 IST (Mon-Fri)</td><td>Aggregates 5m bars, triggers breakouts, tracks trailing stops</td></tr>
-            <tr><td><code>nse_entry_cutoff_1430</code></td><td>Entry Cutoff Gate</td><td>14:30 IST (Mon-Fri)</td><td>Blocks any subsequent new long breakout entries</td></tr>
-            <tr><td><code>nse_eod_liquidation_1500</code></td><td>Forced EOD Liquidation</td><td>15:00 IST (Mon-Fri)</td><td>Liquidates all open positions before market close</td></tr>
-            <tr><td><code>nse_session_close_1530</code></td><td>Session Close &amp; Reconciliation</td><td>15:30 IST (Mon-Fri)</td><td>Verifies double-entry ledger &amp; persists daily metrics</td></tr>
+            <tr><td colspan="4" style="text-align:center; color:var(--muted);">Loading scheduled jobs...</td></tr>
           </tbody>
         </table>
       </div>
@@ -543,49 +553,36 @@
       }
     }
 
-    function setElText(id, text) {
-      const el = document.getElementById(id);
-      if (el) el.textContent = text;
-    }
-
-    function setElHtml(id, html) {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = html;
-    }
-
     async function refreshAllData() {
-      setElText('sync-status', 'Fetching data...');
+      document.getElementById('sync-status').textContent = 'Fetching data...';
 
       // 1. Portfolio & Daily Report
       const portfolio = await fetchJson('/portfolio');
       if (portfolio) {
-        setElText('kpi-starting-capital', '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
-        setElText('kpi-cash-balance', '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
-        if (portfolio.deployed_exposure_inr !== undefined && portfolio.deployed_exposure_inr !== null) {
-          setElText('kpi-deployed-exposure', '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        document.getElementById('kpi-starting-capital').textContent = '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-cash-balance').textContent = '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        if (portfolio.deployed_exposure_inr) {
+          document.getElementById('kpi-deployed-exposure').textContent = '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
         }
-        if (portfolio.net_equity_inr !== undefined && portfolio.net_equity_inr !== null) {
-          setElText('kpi-net-equity', '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        if (portfolio.net_equity_inr) {
+          document.getElementById('kpi-net-equity').textContent = '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2});
         }
         if (portfolio.candle_cache) {
-          setElText('kpi-cache-stats', `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`);
-          setElText('sub-cache-bars', `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`);
+          document.getElementById('kpi-cache-stats').textContent = `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`;
+          document.getElementById('sub-cache-bars').textContent = `${portfolio.candle_cache.total_bars_cached} bars cached (${portfolio.candle_cache.symbols_cached} symbols)`;
         }
         const recPill = portfolio.reconciled 
           ? '<span class="pill ok">RECONCILED_OK</span>' 
           : '<span class="pill danger">MISMATCH</span>';
-        setElHtml('kpi-ledger-status', recPill);
+        document.getElementById('kpi-ledger-status').innerHTML = recPill;
       }
 
       const dailyRep = await fetchJson('/reports/daily');
       if (dailyRep) {
         const pnl = Number(dailyRep.realized_pnl_inr);
         const prefix = pnl >= 0 ? '+₹' : '-₹';
-        const pnlEl = document.getElementById('kpi-realized-pnl');
-        if (pnlEl) {
-          pnlEl.textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
-          pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-        }
+        document.getElementById('kpi-realized-pnl').textContent = prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('kpi-realized-pnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
       }
 
       // 2. Positions Table
@@ -637,14 +634,14 @@
       // 4. Market Status
       const mkt = await fetchJson('/market/status');
       if (mkt) {
-        setElText('val-session-state', mkt.session_state);
+        document.getElementById('val-session-state').textContent = mkt.session_state;
       }
 
       // 5. Backtest Runs & Candles Summary
       const btData = await fetchJson('/backtests');
       const btTbody = document.getElementById('backtests-tbody');
       const btTradesTbody = document.getElementById('bt-trades-tbody');
-      if (btTbody && btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
+      if (btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
         btTbody.innerHTML = btData.backtest_runs.map((r, i) => `
           <tr style="cursor:pointer;" onclick="renderBtTrades(${i})">
             <td><code>${r.run_id}</code></td>
@@ -666,13 +663,13 @@
         if (btTradesTbody && window._btRuns[0] && window._btRuns[0].trades) {
           renderBtTrades(0);
         }
-      } else if (btTbody) {
+      } else {
         btTbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">No backtests executed yet.</td></tr>';
       }
 
       const cData = await fetchJson('/market/candles-summary');
       if (cData) {
-        setElText('kpi-total-candles', Number(cData.total_candles).toLocaleString());
+        document.getElementById('kpi-total-candles').textContent = Number(cData.total_candles).toLocaleString();
         const cTbody = document.getElementById('candles-tbody');
         if (cTbody && cData.by_symbol) {
           cTbody.innerHTML = cData.by_symbol.map(s => `
@@ -681,6 +678,60 @@
               <td>NSE Cash</td>
               <td>${s.bars_count} bars</td>
               <td><span class="pill ok">VALIDATED (0 Anomalies)</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      // 6. Risk Status
+      const riskData = await fetchJson('/risk/status');
+      if (riskData) {
+        const ksEl = document.getElementById('kpi-kill-switch');
+        if (ksEl) {
+          ksEl.innerHTML = riskData.kill_switch_active 
+            ? '<span class="pill danger">TRIPPED (ACTIVE)</span>' 
+            : '<span class="pill ok">STANDBY (INACTIVE)</span>';
+        }
+      }
+
+      // 7. Runner & Watchdog Status
+      const runnerData = await fetchJson('/runner/status');
+      if (runnerData) {
+        const statePill = runnerData.is_running 
+          ? '<span class="pill ok">RUNNING</span>' 
+          : '<span class="pill warn">STOPPED</span>';
+        setElHtml('kpi-runner-state', statePill);
+        setElText('kpi-runner-jobs-count', `${runnerData.jobs_count || runnerData.jobs.length} Active Jobs`);
+
+        if (runnerData.watchdog) {
+          const wd = runnerData.watchdog;
+          let pillClass = 'ok';
+          if (wd.status === 'FEED_STALLED') pillClass = 'danger';
+          else if (wd.status === 'IDLE_OFF_HOURS') pillClass = 'warn';
+          setElHtml('kpi-watchdog-status', `<span class="pill ${pillClass}">${wd.status}</span>`);
+          const elapsedSec = (wd.seconds_since_last_tick !== null && wd.seconds_since_last_tick !== undefined)
+            ? `${Number(wd.seconds_since_last_tick).toFixed(1)}s since tick`
+            : 'Off-hours standby';
+          setElText('sub-watchdog-details', `${elapsedSec} • Threshold: ${wd.staleness_threshold_seconds}s`);
+        }
+
+        if (runnerData.telemetry) {
+          const telem = runnerData.telemetry;
+          setElText('kpi-runner-latency', `${Number(telem.avg_latency_ms).toFixed(1)} ms`);
+          const budgetPill = telem.budget_compliant 
+            ? 'Budget: &le; 500 ms (<span style="color:var(--green)">COMPLIANT</span>)'
+            : 'Budget: &le; 500 ms (<span style="color:var(--red)">EXCEEDED</span>)';
+          setElHtml('sub-runner-latency-budget', budgetPill);
+        }
+
+        const runnerJobsTbody = document.getElementById('runner-jobs-tbody');
+        if (runnerJobsTbody && runnerData.jobs && runnerData.jobs.length > 0) {
+          runnerJobsTbody.innerHTML = runnerData.jobs.map(j => `
+            <tr>
+              <td><code>${j.id}</code></td>
+              <td><strong>${j.name}</strong></td>
+              <td>${j.next_run_time ? j.next_run_time.split('.')[0] : 'Pending'}</td>
+              <td><span class="pill ok">${j.trigger}</span></td>
             </tr>
           `).join('');
         }
