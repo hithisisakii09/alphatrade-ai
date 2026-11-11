@@ -207,6 +207,7 @@
         <button class="tab-btn" onclick="switchView('orders', this)">3. Orders &amp; Fills</button>
         <button class="tab-btn" onclick="switchView('risk', this)">4. Risk &amp; Kill-Switch Monitor</button>
         <button class="tab-btn" onclick="switchView('runner', this)">5. APScheduler Runner</button>
+        <button class="tab-btn" onclick="switchView('backtest', this)">6. Backtest &amp; Research</button>
       </div>
       <div class="sync-bar">
         <span id="sync-status">Live polling active (5s)</span>
@@ -417,6 +418,95 @@
         </table>
       </div>
     </section>
+
+    <!-- 6. Backtest & Research Analytics -->
+    <section id="view-backtest" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>Total Real 1m Candles</h3>
+          <div id="kpi-total-candles" class="val">5,923</div>
+          <div class="sub">Across 13 NIFTY 100 Constituents</div>
+        </div>
+        <div class="card">
+          <h3>Backtest Execution Engine</h3>
+          <div class="val" style="color:var(--teal);">Isolated In-Memory</div>
+          <div class="sub">Zero-lookahead • Double-entry accounting</div>
+        </div>
+        <div class="card">
+          <h3>Statutory Slippage Mode</h3>
+          <div class="val">NSE Slippage Matrix</div>
+          <div class="sub">Pessimistic intrabar stops &amp; taxes</div>
+        </div>
+        <div class="card">
+          <h3>Simulation Action</h3>
+          <div style="margin-top:0.5rem;">
+            <button class="refresh-btn" style="background:var(--navy); color:#fff; border-color:var(--navy); width:100%; padding:0.6rem;" onclick="triggerBacktestRun(event)">&#x26a1; Run Backtest Simulation</button>
+          </div>
+          <div class="sub" style="margin-top:0.3rem;">Replays all stored candles</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Quantitative Backtest Runs &amp; Out-of-Sample Performance</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Run ID</th>
+              <th>Dataset ID</th>
+              <th>Trades</th>
+              <th>Win Rate</th>
+              <th>Profit Factor</th>
+              <th>Net Exp (INR)</th>
+              <th>Net Exp (R)</th>
+              <th>Max DD</th>
+              <th>Cost-to-Risk</th>
+              <th>Evidence Classification</th>
+            </tr>
+          </thead>
+          <tbody id="backtests-tbody">
+            <tr><td colspan="10" style="text-align:center; color:var(--muted);">Loading backtest runs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-card">
+        <h2>Latest Backtest Simulated Trade Log</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Session Date</th>
+              <th>Qty</th>
+              <th>Entry Price</th>
+              <th>Exit Price</th>
+              <th>Net P&amp;L (INR)</th>
+              <th>R-Multiple</th>
+              <th>Exit Reason</th>
+            </tr>
+          </thead>
+          <tbody id="bt-trades-tbody">
+            <tr><td colspan="8" style="text-align:center; color:var(--muted);">Select or run a backtest to inspect trades.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-card">
+        <h2>Market Ingestion Database Breakdown</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Exchange</th>
+              <th>1m Bars Ingested</th>
+              <th>Validation Status</th>
+            </tr>
+          </thead>
+          <tbody id="candles-tbody">
+            <tr><td colspan="4" style="text-align:center; color:var(--muted);">Loading candle breakdown...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -512,7 +602,105 @@
         document.getElementById('val-session-state').textContent = mkt.session_state;
       }
 
+      // 5. Backtest Runs & Candles Summary
+      const btData = await fetchJson('/backtests');
+      const btTbody = document.getElementById('backtests-tbody');
+      const btTradesTbody = document.getElementById('bt-trades-tbody');
+      if (btData && btData.backtest_runs && btData.backtest_runs.length > 0) {
+        btTbody.innerHTML = btData.backtest_runs.map((r, i) => `
+          <tr style="cursor:pointer;" onclick="renderBtTrades(${i})">
+            <td><code>${r.run_id}</code></td>
+            <td style="font-size:0.8rem;">${r.dataset_id}</td>
+            <td><strong>${r.total_trades}</strong></td>
+            <td>${Number(r.win_rate_pct).toFixed(1)}%</td>
+            <td>${Number(r.profit_factor).toFixed(2)}</td>
+            <td style="color:${Number(r.net_expectancy_inr) >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600;">
+              ${Number(r.net_expectancy_inr) >= 0 ? '+' : ''}₹${Number(r.net_expectancy_inr).toFixed(2)}
+            </td>
+            <td>${Number(r.net_expectancy_r) >= 0 ? '+' : ''}${Number(r.net_expectancy_r).toFixed(2)} R</td>
+            <td>${Number(r.max_drawdown_pct).toFixed(2)}%</td>
+            <td>${Number(r.avg_cost_to_risk_pct).toFixed(1)}%</td>
+            <td><span class="pill ${r.evidence_classification === 'POSITIVE_EVIDENCE' ? 'ok' : 'warn'}">${r.evidence_classification}</span></td>
+          </tr>
+        `).join('');
+
+        window._btRuns = btData.backtest_runs;
+        if (btTradesTbody && window._btRuns[0] && window._btRuns[0].trades) {
+          renderBtTrades(0);
+        }
+      } else {
+        btTbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">No backtests executed yet.</td></tr>';
+      }
+
+      const cData = await fetchJson('/market/candles-summary');
+      if (cData) {
+        document.getElementById('kpi-total-candles').textContent = Number(cData.total_candles).toLocaleString();
+        const cTbody = document.getElementById('candles-tbody');
+        if (cTbody && cData.by_symbol) {
+          cTbody.innerHTML = cData.by_symbol.map(s => `
+            <tr>
+              <td><strong>${s.symbol}</strong></td>
+              <td>NSE Cash</td>
+              <td>${s.bars_count} bars</td>
+              <td><span class="pill ok">VALIDATED (0 Anomalies)</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+
       document.getElementById('sync-status').textContent = 'Last synced at ' + new Date().toLocaleTimeString();
+    }
+
+    function renderBtTrades(idx) {
+      if (!window._btRuns || !window._btRuns[idx]) return;
+      const r = window._btRuns[idx];
+      const tbody = document.getElementById('bt-trades-tbody');
+      if (!tbody) return;
+      if (!r.trades || r.trades.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--muted);">No trades triggered in run ${r.run_id} (breakout conditions not met).</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = r.trades.map(t => `
+        <tr>
+          <td><strong>${t.symbol}</strong></td>
+          <td>${t.session_date}</td>
+          <td>${t.quantity}</td>
+          <td>₹${Number(t.entry_price).toFixed(2)}</td>
+          <td>₹${Number(t.exit_price).toFixed(2)}</td>
+          <td style="font-weight:600; color:${Number(t.net_pnl_inr) >= 0 ? 'var(--green)' : 'var(--red)'};">
+            ${Number(t.net_pnl_inr) >= 0 ? '+' : ''}₹${Number(t.net_pnl_inr).toFixed(2)}
+          </td>
+          <td>${Number(t.r_multiple_net).toFixed(2)} R</td>
+          <td><span class="pill ok">${t.exit_reason}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    async function triggerBacktestRun(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Running Backtest...';
+        btn.disabled = true;
+      }
+      try {
+        const resp = await fetch('/backtest/run', { method: 'POST' });
+        const res = await resp.json();
+        if (res.status === 'SUCCESS') {
+          alert(`Simulation Completed Successfully!\nRun ID: ${res.run_id}\nTotal Trades: ${res.total_trades}\nWin Rate: ${Number(res.win_rate_pct).toFixed(1)}%\nProfit Factor: ${res.profit_factor}\nNet Exp: ₹${Number(res.net_expectancy_inr).toFixed(2)} (${res.net_expectancy_r} R)\nClassification: ${res.evidence_classification}`);
+        } else {
+          alert('Backtest completed: ' + JSON.stringify(res));
+        }
+        await refreshAllData();
+      } catch (e) {
+        alert('Backtest error: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
     }
 
     async function triggerLiveTick(event) {

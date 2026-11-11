@@ -203,6 +203,45 @@ def get_backtests():
     return {"backtest_runs": list_backtest_summaries(db)}
 
 
+@router.post("/backtest/run")
+def trigger_backtest_run(symbols: str | None = None, dataset_id: str = "WEB_DASHBOARD_RUN"):
+  from scripts.run_live_backtest import run_backtest_from_db
+  sym_list = (
+      [s.strip().upper() for s in symbols.split(",") if s.strip()]
+      if symbols
+      else ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+  )
+  summary = run_backtest_from_db(symbols=sym_list, dataset_id=dataset_id, db_url=_cfg.database_url)
+  if not summary:
+    return {"status": "NO_DATA", "message": "No historical candle bars found in database."}
+  return {
+      "status": "SUCCESS",
+      "run_id": summary.run_id,
+      "total_trades": summary.total_trades,
+      "win_rate_pct": str(summary.win_rate_pct),
+      "profit_factor": str(summary.profit_factor),
+      "net_expectancy_inr": str(summary.net_expectancy_inr),
+      "net_expectancy_r": str(summary.net_expectancy_r),
+      "max_drawdown_pct": str(summary.max_drawdown_pct),
+      "evidence_classification": summary.evidence_classification,
+  }
+
+
+@router.get("/market/candles-summary")
+def get_market_candles_summary():
+  with _SessionLocal() as db:
+    cur = db.conn.cursor()
+    total_candles = cur.execute("SELECT count(*) FROM market_candles").fetchone()[0]
+    by_symbol_rows = cur.execute(
+        "SELECT symbol, count(*) FROM market_candles GROUP BY symbol ORDER BY count(*) DESC"
+    ).fetchall()
+    return {
+        "total_candles": total_candles,
+        "symbols_count": len(by_symbol_rows),
+        "by_symbol": [{"symbol": r[0], "bars_count": r[1]} for r in by_symbol_rows],
+    }
+
+
 @router.get("/runner/status")
 def get_runner_status():
   return {

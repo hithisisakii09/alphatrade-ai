@@ -134,6 +134,8 @@ def run_backtest_from_db(
     else:
       print("\n[INFO] No completed trades triggered in this sample period (price remained inside opening range or did not meet breakout criteria).")
 
+    return summary
+
 
 def main():
   parser = argparse.ArgumentParser(description="Run event-driven backtest on SQLite candles.")
