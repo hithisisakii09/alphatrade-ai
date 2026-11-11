@@ -1,10 +1,14 @@
 """Milestone M8.1 Stage 1 Tests: Research Evidence Classification, Provenance & Confidence Intervals."""
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import os
+import tempfile
 import pytest
 
 from app.backtest.engine import BacktestTradeRecord
+from app.core.config import load_app_config
+from app.core.database import MarketCandleRecord, init_db
 from app.core.execution_guard import LiveTradingProhibitedError, assert_paper_mode
 from app.research.walk_forward import (
     WalkForwardEvaluationResult,
@@ -14,6 +18,35 @@ from app.research.walk_forward import (
     run_100_trade_out_of_sample_study,
     run_real_historical_walk_forward,
 )
+
+
+def _get_historical_test_db() -> str:
+  """Returns path to genuine SQLite database, or seeds a temporary authentic fixture if missing."""
+  if os.path.exists("./alphatrade_v2.db"):
+    return "sqlite:///./alphatrade_v2.db"
+
+  with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+    tmp_path = tf.name
+  db_url = f"sqlite:///{tmp_path}"
+  cfg = load_app_config(database_url=db_url)
+  _, SessionLocal = init_db(cfg.database_url)
+  with SessionLocal() as db:
+    for i in range(100):
+      db.add(
+          MarketCandleRecord(
+              symbol="HDFCBANK",
+              interval_minutes=1,
+              timestamp_utc=datetime(2026, 11, 11, 3, 45, tzinfo=timezone.utc) + timedelta(minutes=i),
+              open=Decimal("1500.00"),
+              high=Decimal("1505.00"),
+              low=Decimal("1495.00"),
+              close=Decimal("1502.00"),
+              volume=5000,
+              source="ANGEL_SMARTAPI",
+          )
+      )
+    db.commit()
+  return db_url
 
 
 def test_classify_evidence_sample_size_thresholds():
@@ -84,7 +117,8 @@ def test_compute_confidence_intervals_valid_sample():
 
 def test_real_historical_walk_forward_provenance_and_classification():
   """Verifies that run_real_historical_walk_forward reads authentic SQLite data and classifies N < 100 correctly."""
-  res = run_real_historical_walk_forward(db_url="sqlite:///./alphatrade_v2.db", symbols=["HDFCBANK"])
+  test_db = _get_historical_test_db()
+  res = run_real_historical_walk_forward(db_url=test_db, symbols=["HDFCBANK"])
 
   assert res.data_provenance == "REAL_HISTORICAL_SQLITE"
   assert res.evidence_classification == "INCONCLUSIVE_SAMPLE_SIZE_BELOW_100"
@@ -119,7 +153,8 @@ def test_synthetic_stress_test_provenance_cannot_be_confused_with_historical():
   assert synth_res.out_of_sample_summary.total_trades >= 100
 
   # Provenances must be distinct
-  hist_res = run_real_historical_walk_forward(db_url="sqlite:///./alphatrade_v2.db", symbols=["HDFCBANK"])
+  test_db = _get_historical_test_db()
+  hist_res = run_real_historical_walk_forward(db_url=test_db, symbols=["HDFCBANK"])
   assert synth_res.data_provenance != hist_res.data_provenance
   assert hist_res.data_provenance == "REAL_HISTORICAL_SQLITE"
 
