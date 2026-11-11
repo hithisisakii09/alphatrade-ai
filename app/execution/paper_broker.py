@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 import uuid
 from app.core.database import Session
 from app.core.database import FillRecord, OrderRecord, PositionRecord
@@ -36,12 +37,14 @@ class PaperBroker:
       ledger: PortfolioLedger,
       cost_engine: NSECostEngine,
       risk_engine: RiskEngine,
+      notification_service: Any = None,
   ):
     assert_paper_mode()
     self.db = db
     self.ledger = ledger
     self.cost_engine = cost_engine
     self.risk_engine = risk_engine
+    self.notification_service = notification_service
 
   def transition_order(self, order: OrderRecord, new_status: str, timestamp_utc: datetime, reason: str | None = None) -> None:
     allowed = LEGAL_TRANSITIONS.get(order.status, set())
@@ -202,6 +205,21 @@ class PaperBroker:
       self._close_position_from_fill(order, fill)
 
     self.db.commit()
+
+    if self.notification_service and getattr(self.notification_service, "is_configured", False):
+      try:
+        fill_msg = self.notification_service.format_order_fill_message(
+            symbol=order.symbol,
+            side=order.side,
+            quantity=exec_qty,
+            fill_price=fill_price,
+            total_fees=cost_bd.total_fees_inr,
+            reason=order.reason,
+        )
+        self.notification_service.send_message_sync(fill_msg)
+      except Exception:
+        pass
+
     return fill
 
   def _open_or_augment_position_from_fill(

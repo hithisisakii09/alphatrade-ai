@@ -8,6 +8,7 @@ import traceback
 from tests.unit import test_core_and_indicators as t_core
 from tests.unit import test_risk_and_costs as t_risk
 from tests.unit import test_angel_provider as t_angel
+from tests.unit import test_notifications as t_notify
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.backtest import test_backtester_and_lookahead as t_bt
@@ -49,6 +50,11 @@ def run_all() -> int:
           t_angel.test_angel_response_parsing_to_candle_bars,
           t_angel.test_angel_auth_error_when_credentials_missing,
           t_angel.test_get_data_provider_factory,
+      ]),
+      ("unit/test_notifications.py", [
+          t_notify.test_notification_service_configuration,
+          t_notify.test_message_formatting_integrity,
+          t_notify.test_send_message_sync_mocked,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

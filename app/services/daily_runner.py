@@ -20,6 +20,7 @@ from app.execution.paper_broker import PaperBroker
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.reports import generate_daily_report
 from app.risk.engine import RiskEngine
+from app.services.notifications import WebhookNotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,7 @@ class ScheduledDailyRunner:
     _, self.SessionLocal = init_db(self.db_url)
     self.calendar = NSECalendar()
     self.provider: MarketDataProvider = get_data_provider(self.config.data_provider)
+    self.notification_service = WebhookNotificationService()
     self.scheduler = BackgroundScheduler(timezone=IST)
     self._is_active = False
     self._register_jobs()
@@ -250,6 +252,23 @@ class ScheduledDailyRunner:
       ledger = PortfolioLedger(db, prof.reference_capital)
       reconciled, msg = ledger.reconcile()
       daily_rep = generate_daily_report(db, ledger, session_date)
+
+      if self.notification_service.is_configured:
+        try:
+          positions_today = db.query(PositionRecord).filter(PositionRecord.session_date == session_date).all()
+          snap = ledger.take_snapshot(ts)
+          msg_text = self.notification_service.format_eod_summary_message(
+              session_date=session_date,
+              starting_capital=prof.reference_capital,
+              ending_cash=to_decimal(snap.cash_balance_inr),
+              total_realized_pnl=to_decimal(snap.realized_pnl_inr),
+              total_fees_paid=to_decimal(snap.total_fees_inr),
+              trades_count=len(positions_today),
+          )
+          self.notification_service.send_message_sync(msg_text)
+        except Exception as e:
+          logger.warning(f"Failed to dispatch EOD notification: {e}")
+
       return {
           "session_date": session_date,
           "reconciled": reconciled,
