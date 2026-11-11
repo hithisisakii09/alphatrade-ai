@@ -6,6 +6,7 @@ import tempfile
 import traceback
 
 from tests.unit import test_core_and_indicators as t_core
+from tests.unit import test_candle_cache as t_cache
 from tests.unit import test_risk_and_costs as t_risk
 from tests.unit import test_angel_provider as t_angel
 from tests.unit import test_notifications as t_notify
@@ -38,6 +39,9 @@ def run_all() -> int:
           t_core.test_holiday_and_special_session_calendar,
           t_core.test_validator_catches_duplicates_stale_and_unadjusted_splits,
           t_core.test_indicators_vwap_ema_atr_orb_rvol,
+      ]),
+      ("unit/test_candle_cache.py", [
+          t_cache.test_live_candle_cache_lifecycle_and_deduplication,
       ]),
       ("unit/test_risk_and_costs.py", [
           t_risk.test_exact_legacy_8_20_10_worked_example,
