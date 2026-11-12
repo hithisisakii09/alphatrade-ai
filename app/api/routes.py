@@ -253,8 +253,10 @@ def get_market_candles_summary():
 
 @router.get("/runner/status")
 def get_runner_status():
+  has_poller = any(j["id"] == "nse_intraday_tick" for j in _daily_runner.get_jobs_summary())
   return {
       "is_running": _daily_runner.is_running,
+      "poller_enabled": has_poller,
       "scheduler_timezone": "Asia/Kolkata",
       "jobs_count": len(_daily_runner.get_jobs_summary()),
       "jobs": _daily_runner.get_jobs_summary(),
@@ -273,6 +275,26 @@ def start_runner():
 def stop_runner():
   _daily_runner.stop()
   return {"status": "STOPPED", "is_running": _daily_runner.is_running}
+
+
+@router.post("/runner/poller/enable")
+def enable_runner_poller():
+  _daily_runner.enable_intraday_tick_job()
+  return {
+      "status": "POLLER_ENABLED",
+      "jobs_count": len(_daily_runner.get_jobs_summary()),
+      "is_running": _daily_runner.is_running,
+  }
+
+
+@router.post("/runner/poller/disable")
+def disable_runner_poller():
+  _daily_runner.disable_intraday_tick_job()
+  return {
+      "status": "POLLER_DISABLED",
+      "jobs_count": len(_daily_runner.get_jobs_summary()),
+      "is_running": _daily_runner.is_running,
+  }
 
 
 @router.post("/runner/tick")

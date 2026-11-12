@@ -22,11 +22,13 @@ class FeedWatchdog:
       staleness_threshold_seconds: int = 180,
       notification_service: WebhookNotificationService | None = None,
       on_stall_callback: Callable[[str], None] | None = None,
+      on_recovery_callback: Callable[[], None] | None = None,
       calendar: NSECalendar | None = None,
   ):
     self.staleness_threshold_seconds = staleness_threshold_seconds
     self.notification_service = notification_service
     self.on_stall_callback = on_stall_callback
+    self.on_recovery_callback = on_recovery_callback
     self.calendar = calendar or NSECalendar()
     self.last_tick_time_utc: datetime | None = None
     self.is_stalled: bool = False
@@ -40,6 +42,11 @@ class FeedWatchdog:
     if self.is_stalled:
       logger.info("Watchdog: Feed recovered from stalled state at %s", ts.isoformat())
       self.is_stalled = False
+      if self.on_recovery_callback:
+        try:
+          self.on_recovery_callback()
+        except Exception as e:
+          logger.warning("Error executing watchdog on_recovery_callback: %s", e)
 
   def is_in_active_window(self, now_utc: datetime | None = None) -> bool:
     """Checks if current time is within active NSE trading window (09:15 - 15:30 IST on a trading day)."""

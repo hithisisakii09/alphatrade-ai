@@ -58,6 +58,23 @@ def test_runner_status_fastapi_endpoint(monkeypatch=None):
     assert tick_resp.status_code == 200
     assert tick_resp.json()["status"] == "SUCCESS"
 
+  # Test poller enable and disable endpoints
+  resp_en = client.post("/runner/poller/enable")
+  assert resp_en.status_code == 200
+  assert resp_en.json()["status"] == "POLLER_ENABLED"
+  assert resp_en.json()["jobs_count"] == 9
+
+  status_en = client.get("/runner/status").json()
+  assert status_en["poller_enabled"] is True
+
+  resp_dis = client.post("/runner/poller/disable")
+  assert resp_dis.status_code == 200
+  assert resp_dis.json()["status"] == "POLLER_DISABLED"
+  assert resp_dis.json()["jobs_count"] == 8
+
+  status_dis = client.get("/runner/status").json()
+  assert status_dis["poller_enabled"] is False
+
   from app.api.routes import _daily_runner
   if _daily_runner and _daily_runner.is_running:
     _daily_runner.stop()

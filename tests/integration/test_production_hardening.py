@@ -94,14 +94,19 @@ def test_watchdog_health_and_dead_man_switch():
   """Verifies feed watchdog monitoring, dead-man switch activation on stall, and callback execution."""
   cal = NSECalendar()
   tripped_reasons = []
+  recovered = []
 
   def mock_on_stall(reason: str):
     tripped_reasons.append(reason)
+
+  def mock_on_recovery():
+    recovered.append(True)
 
   watchdog = FeedWatchdog(
       staleness_threshold_seconds=180,
       notification_service=None,
       on_stall_callback=mock_on_stall,
+      on_recovery_callback=mock_on_recovery,
       calendar=cal,
   )
 
@@ -138,6 +143,7 @@ def test_watchdog_health_and_dead_man_switch():
   # Recovery: New tick arrives at 10:04:00 IST
   watchdog.record_tick(wed_utc + timedelta(seconds=240))
   assert watchdog.is_stalled is False
+  assert len(recovered) == 1
 
   res_recovered = watchdog.check_health(wed_utc + timedelta(seconds=245))
   assert res_recovered["status"] == "HEALTHY"

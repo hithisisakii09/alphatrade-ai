@@ -212,10 +212,16 @@ class ScheduledDailyRunner:
     else:
       self.enable_intraday_poll = os.environ.get("ALPHATRADE_ENABLE_INTRADAY_POLLER", "").lower() in ("true", "1")
 
+    def _on_feed_recovered() -> None:
+      if self.risk_engine.kill_switch_active and self.risk_engine.kill_switch_reason == "STALE_OR_INVALID_MARKET_DATA":
+        logger.info("Watchdog feed recovered: resetting STALE_OR_INVALID_MARKET_DATA kill switch.")
+        self.risk_engine.reset_kill_switch()
+
     self.watchdog = FeedWatchdog(
         staleness_threshold_seconds=180,
         notification_service=self.notification_service,
         on_stall_callback=lambda reason: self.risk_engine.trigger_kill_switch("STALE_OR_INVALID_MARKET_DATA"),
+        on_recovery_callback=_on_feed_recovered,
         calendar=self.calendar,
     )
 

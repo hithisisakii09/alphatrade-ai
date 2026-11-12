@@ -212,6 +212,7 @@
       <div class="sync-bar">
         <span id="sync-status">Live polling active (5s)</span>
         <button class="refresh-btn" onclick="refreshAllData()">&#x21bb; Refresh Now</button>
+        <button id="btn-toggle-poller" class="refresh-btn" style="background:var(--navy); color:#fff; border-color:var(--navy);" onclick="toggleAutoPoller(event)">&#x25b6; Enable 1m Auto-Poller</button>
         <button class="refresh-btn" style="background:var(--teal); color:#fff; border-color:var(--teal);" onclick="triggerLiveTick(event)">&#x26a1; Run 1m Market Tick</button>
       </div>
     </div>
@@ -428,6 +429,11 @@
           <h3>Disaster Recovery Checkpoint</h3>
           <div class="val" style="color:var(--navy);">15:40 IST</div>
           <div class="sub">Automated SQLite WAL TRUNCATE &amp; Checkpoint</div>
+        </div>
+        <div class="card">
+          <h3>1m Auto-Poller</h3>
+          <div id="kpi-poller-state" class="val"><span class="pill warn">PAUSED</span></div>
+          <div class="sub">Intraday 1-minute market tick execution</div>
         </div>
       </div>
 
@@ -728,6 +734,18 @@
         setElHtml('kpi-runner-state', statePill);
         setElText('kpi-runner-jobs-count', `${runnerData.jobs_count || (runnerData.jobs ? runnerData.jobs.length : 8)} Active Jobs`);
 
+        window._pollerEnabled = Boolean(runnerData.poller_enabled);
+        const pollerBtn = document.getElementById('btn-toggle-poller');
+        if (pollerBtn) {
+          pollerBtn.textContent = window._pollerEnabled ? '⏸ Pause Auto-Poller' : '▶ Enable 1m Auto-Poller';
+          pollerBtn.style.background = window._pollerEnabled ? 'var(--amber)' : 'var(--navy)';
+          pollerBtn.style.borderColor = window._pollerEnabled ? 'var(--amber)' : 'var(--navy)';
+        }
+        const pollerPill = window._pollerEnabled 
+          ? '<span class="pill ok">ACTIVE (1m)</span>' 
+          : '<span class="pill warn">PAUSED</span>';
+        setElHtml('kpi-poller-state', pollerPill);
+
         if (runnerData.watchdog) {
           const wd = runnerData.watchdog;
           let pillClass = 'ok';
@@ -841,6 +859,21 @@
           btn.textContent = orig;
           btn.disabled = false;
         }
+      }
+    }
+
+    async function toggleAutoPoller(event) {
+      const btn = event ? event.target : null;
+      const targetEndpoint = window._pollerEnabled ? '/runner/poller/disable' : '/runner/poller/enable';
+      try {
+        if (btn) btn.disabled = true;
+        const resp = await fetch(targetEndpoint, { method: 'POST' });
+        await resp.json();
+        await refreshAllData();
+      } catch (e) {
+        alert('Failed to toggle auto-poller: ' + e.message);
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 
