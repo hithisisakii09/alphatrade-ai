@@ -123,13 +123,26 @@ class AngelSmartAPIDataProvider:
     self.jwt_token = jwt_token or os.environ.get("ANGEL_JWT_TOKEN")
     self.feed_token: str | None = None
     self.refresh_token: str | None = None
-    self._rate_limiter = _RateLimiter(min_interval_sec=1.0)
+    self._rate_limiter = _RateLimiter(min_interval_sec=0.35)
+    self._client = httpx.Client(timeout=15.0)
     self.cache_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         ".cache",
     )
     if not self.jwt_token:
       self._load_cached_session()
+
+  def _get_client(self) -> httpx.Client:
+    if not hasattr(self, "_client") or self._client is None or self._client.is_closed:
+      self._client = httpx.Client(timeout=15.0)
+    return self._client
+
+  def close(self) -> None:
+    if hasattr(self, "_client") and self._client and not self._client.is_closed:
+      self._client.close()
+
+  def __del__(self) -> None:
+    self.close()
 
   def _load_cached_session(self) -> None:
     session_file = os.path.join(self.cache_dir, "angel_session.json")
@@ -200,20 +213,20 @@ class AngelSmartAPIDataProvider:
     }
 
     self._rate_limiter.wait()
-    with httpx.Client(timeout=15.0) as client:
-      resp = client.post(url, json=payload, headers=headers)
-      resp.raise_for_status()
-      data = resp.json()
-      if not data.get("status"):
-        raise ProviderAuthenticationError(
-            f"Angel One login failed: {data.get('message', data.get('errorcode', 'Unknown error'))}"
-        )
-      tokens = data.get("data", {})
-      self.jwt_token = tokens.get("jwtToken")
-      self.feed_token = tokens.get("feedToken")
-      self.refresh_token = tokens.get("refreshToken")
-      self._save_cached_session()
-      return self.jwt_token
+    client = self._get_client()
+    resp = client.post(url, json=payload, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("status"):
+      raise ProviderAuthenticationError(
+          f"Angel One login failed: {data.get('message', data.get('errorcode', 'Unknown error'))}"
+      )
+    tokens = data.get("data", {})
+    self.jwt_token = tokens.get("jwtToken")
+    self.feed_token = tokens.get("feedToken")
+    self.refresh_token = tokens.get("refreshToken")
+    self._save_cached_session()
+    return self.jwt_token
 
   def parse_angel_response(self, symbol: str, raw_candles: list[list]) -> list[CandleBar]:
     """Parses Angel One getCandleData [timestamp_str, open, high, low, close, volume] records."""
@@ -286,36 +299,36 @@ class AngelSmartAPIDataProvider:
     for attempt in range(max_retries):
       self._rate_limiter.wait()
       try:
-        with httpx.Client(timeout=15.0) as client:
-          resp = client.post(url, json=payload, headers=headers)
-          if resp.status_code == 429 or (resp.status_code == 403 and "exceeding access rate" in resp.text.lower()):
-            time.sleep(2.0 * (2**attempt))
+        client = self._get_client()
+        resp = client.post(url, json=payload, headers=headers)
+        if resp.status_code == 429 or (resp.status_code == 403 and "exceeding access rate" in resp.text.lower()):
+          time.sleep(2.0 * (2**attempt))
+          continue
+        if resp.status_code == 401:
+          if self.password and attempt == 0:
+            self.login()
+            headers["Authorization"] = (
+                self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
+            )
             continue
-          if resp.status_code == 401:
-            if self.password and attempt == 0:
-              self.login()
-              headers["Authorization"] = (
-                  self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
-              )
-              continue
-            raise ProviderAuthenticationError(f"Angel SmartAPI unauthorized (401): {resp.text}")
-          if resp.status_code == 403:
-            raise ProviderAuthenticationError(f"Angel SmartAPI forbidden (403): {resp.text}")
-          resp.raise_for_status()
-          data = resp.json()
-          if not data.get("status"):
-            msg = str(data.get("message", data))
-            err_code = str(data.get("errorcode", ""))
-            if ("token" in msg.lower() or "invalid" in msg.lower() or err_code == "AG8001") and self.password and attempt == 0:
-              logger.info("Angel One session token expired or invalid; re-authenticating via TOTP...")
-              self.login()
-              headers["Authorization"] = (
-                  self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
-              )
-              continue
-            raise ProviderDataError(f"Angel SmartAPI error: {data.get('message', data)}")
-          raw_candles = data.get("data", []) or []
-          return self.parse_angel_response(symbol, raw_candles)
+          raise ProviderAuthenticationError(f"Angel SmartAPI unauthorized (401): {resp.text}")
+        if resp.status_code == 403:
+          raise ProviderAuthenticationError(f"Angel SmartAPI forbidden (403): {resp.text}")
+        resp.raise_for_status()
+        data = resp.json()
+        if not data.get("status"):
+          msg = str(data.get("message", data))
+          err_code = str(data.get("errorcode", ""))
+          if ("token" in msg.lower() or "invalid" in msg.lower() or err_code == "AG8001") and self.password and attempt == 0:
+            logger.info("Angel One session token expired or invalid; re-authenticating via TOTP...")
+            self.login()
+            headers["Authorization"] = (
+                self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
+            )
+            continue
+          raise ProviderDataError(f"Angel SmartAPI error: {data.get('message', data)}")
+        raw_candles = data.get("data", []) or []
+        return self.parse_angel_response(symbol, raw_candles)
       except httpx.HTTPError as e:
         if attempt == max_retries - 1:
           raise ProviderDataError(f"Angel SmartAPI network failure after {max_retries} attempts: {e}") from e
