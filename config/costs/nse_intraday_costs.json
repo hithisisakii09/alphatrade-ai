@@ -19,7 +19,10 @@
       "stamp_duty_sell_pct": "0.0000",
       "gst_pct": "0.18",
       "half_spread_pct": "0.00025",
-      "slippage_pct": "0.00025"
+      "slippage_pct": "0.00025",
+      "enable_market_impact": false,
+      "impact_coefficient_eta": "0.5",
+      "impact_coefficient_gamma": "0.25"
     },
     "ZERO_BROKERAGE_TIER": {
       "brokerage_pct": "0.0000",
@@ -33,7 +36,10 @@
       "stamp_duty_sell_pct": "0.0000",
       "gst_pct": "0.18",
       "half_spread_pct": "0.00025",
-      "slippage_pct": "0.00025"
+      "slippage_pct": "0.00025",
+      "enable_market_impact": false,
+      "impact_coefficient_eta": "0.5",
+      "impact_coefficient_gamma": "0.25"
     }
   }
 }

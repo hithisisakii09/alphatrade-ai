@@ -706,6 +706,7 @@ class ScheduledDailyRunner:
                     daily_realized_pnl_inr=ledger.get_daily_realized_pnl(session_date),
                     daily_unrealized_pnl_inr=ledger.get_daily_unrealized_pnl(),
                     atr_value=latest_atr,
+                    bar_volume=latest_bar.volume,
                 )
 
                 risk_rec = RiskDecisionRecord(

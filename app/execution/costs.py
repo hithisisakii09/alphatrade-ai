@@ -37,6 +37,8 @@ class NSECostEngine:
       quantity: int,
       raw_price: Decimal,
       custom_slippage_pct: Decimal | None = None,
+      bar_volume: int | None = None,
+      daily_volatility: Decimal | None = None,
   ) -> LegCostBreakdown:
     side_u = side.upper()
     if side_u not in ("BUY", "SELL"):
@@ -47,7 +49,16 @@ class NSECostEngine:
     raw_p = to_decimal(raw_price)
     qty_d = Decimal(quantity)
     half_spread = self.profile.half_spread_pct
-    slip_pct = to_decimal(custom_slippage_pct) if custom_slippage_pct is not None else self.profile.slippage_pct
+
+    if getattr(self.profile, "enable_market_impact", False) and bar_volume is not None and bar_volume > 0:
+      sig = daily_volatility or Decimal("0.015")
+      eta = getattr(self.profile, "impact_coefficient_eta", Decimal("0.5"))
+      gamma = getattr(self.profile, "impact_coefficient_gamma", Decimal("0.25"))
+      sqrt_part = (qty_d / Decimal(bar_volume)).sqrt()
+      slip_pct = (eta + gamma) * sig * sqrt_part
+    else:
+      slip_pct = to_decimal(custom_slippage_pct) if custom_slippage_pct is not None else self.profile.slippage_pct
+
     friction_pct = half_spread + slip_pct
 
     if side_u == "BUY":
@@ -102,10 +113,21 @@ class NSECostEngine:
         total_fees_inr=total_fees,
     )
 
-  def estimate_roundtrip_cost(self, quantity: int, entry_price: Decimal, exit_price: Decimal | None = None) -> Decimal:
+  def estimate_roundtrip_cost(
+      self,
+      quantity: int,
+      entry_price: Decimal,
+      exit_price: Decimal | None = None,
+      bar_volume: int | None = None,
+      daily_volatility: Decimal | None = None,
+  ) -> Decimal:
     """Returns total round-trip statutory + brokerage + spread + slippage cost in INR."""
     ep = to_decimal(entry_price)
     xp = to_decimal(exit_price) if exit_price is not None else ep
-    buy_leg = self.compute_leg_costs("BUY", quantity, ep)
-    sell_leg = self.compute_leg_costs("SELL", quantity, xp)
+    buy_leg = self.compute_leg_costs(
+        "BUY", quantity, ep, bar_volume=bar_volume, daily_volatility=daily_volatility
+    )
+    sell_leg = self.compute_leg_costs(
+        "SELL", quantity, xp, bar_volume=bar_volume, daily_volatility=daily_volatility
+    )
     return round_paise(buy_leg.total_fees_inr + sell_leg.total_fees_inr)

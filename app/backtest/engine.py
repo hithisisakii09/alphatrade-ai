@@ -317,6 +317,7 @@ class EventDrivenBacktester:
                 daily_realized_pnl_inr=self.ledger.get_daily_realized_pnl(s_date),
                 daily_unrealized_pnl_inr=self.ledger.get_daily_unrealized_pnl(),
                 atr_value=latest_atr,
+                bar_volume=bar.volume,
             )
             if risk_dec.approved and risk_dec.approved_quantity >= 1:
               order, _ = self.broker.submit_order(

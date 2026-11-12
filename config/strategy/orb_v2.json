@@ -37,7 +37,9 @@
       "adaptive_atr_trailing": false,
       "adaptive_atr_trail_multiplier": "2.0",
       "require_portfolio_var_cap": false,
-      "max_portfolio_var_95_pct": "0.025"
+      "max_portfolio_var_95_pct": "0.025",
+      "require_participation_rate_cap": false,
+      "max_participation_rate_pct": "0.05"
     },
     "MICRO_CAPITAL_10K": {
       "reference_capital": "10000.00",
@@ -54,7 +56,9 @@
       "trailing_drop_pct": "0.0075",
       "max_cost_to_risk_ratio": "0.15",
       "require_portfolio_var_cap": false,
-      "max_portfolio_var_95_pct": "0.025"
+      "max_portfolio_var_95_pct": "0.025",
+      "require_participation_rate_cap": false,
+      "max_participation_rate_pct": "0.05"
     },
     "LEGACY_SWING_8_20_10": {
       "reference_capital": "100000.00",
@@ -71,7 +75,9 @@
       "trailing_drop_pct": "0.1000",
       "max_cost_to_risk_ratio": "0.25",
       "require_portfolio_var_cap": false,
-      "max_portfolio_var_95_pct": "0.025"
+      "max_portfolio_var_95_pct": "0.025",
+      "require_participation_rate_cap": false,
+      "max_participation_rate_pct": "0.05"
     }
   }
 }

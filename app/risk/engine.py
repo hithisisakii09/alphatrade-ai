@@ -214,6 +214,7 @@ class RiskEngine:
       data_is_fresh: bool = True,
       ledger_is_reconciled: bool = True,
       atr_value: Decimal | None = None,
+      bar_volume: int | None = None,
   ) -> RiskApprovalDecision:
     """Evaluates a candidate strategy signal against all deterministic risk and portfolio limits."""
     cap = to_decimal(current_capital_inr)
@@ -407,9 +408,29 @@ class RiskEngine:
             ),
         )
 
+    # 6c. Participation Rate & Liquidity Gate
+    if getattr(self.profile, "require_participation_rate_cap", False) and bar_volume is not None and bar_volume > 0:
+      max_part_pct = getattr(self.profile, "max_participation_rate_pct", Decimal("0.05"))
+      max_allowed_qty = int((Decimal(bar_volume) * max_part_pct).to_integral_value(rounding=ROUND_DOWN))
+      if final_qty > max_allowed_qty:
+        return RiskApprovalDecision(
+            approved=False,
+            reason_code="PARTICIPATION_RATE_LIMIT_EXCEEDED",
+            approved_quantity=0,
+            initial_stop_price=levels.initial_stop_price,
+            trailing_activation_price=trailing_activation_p,
+            risk_budget_inr=risk_budget,
+            estimated_roundtrip_cost_inr=Decimal("0.00"),
+            cost_to_risk_ratio=Decimal("0.0000"),
+            explanation=(
+                f"Rejected: Requested quantity {final_qty} shares exceeds maximum participation "
+                f"limit {max_allowed_qty} shares ({max_part_pct * 100:.1f}% of bar volume {bar_volume})."
+            ),
+        )
+
     # 7. Cost-to-risk ratio check
     actual_trade_risk_1r = round_paise(Decimal(final_qty) * levels.stop_distance_per_share)
-    est_rt_cost = self.cost_engine.estimate_roundtrip_cost(final_qty, entry_p)
+    est_rt_cost = self.cost_engine.estimate_roundtrip_cost(final_qty, entry_p, bar_volume=bar_volume)
     cost_to_risk = round_price(est_rt_cost / actual_trade_risk_1r) if actual_trade_risk_1r > Decimal("0") else Decimal("1")
 
     if cost_to_risk > self.profile.max_cost_to_risk_ratio:

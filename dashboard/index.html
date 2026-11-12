@@ -404,6 +404,48 @@
         </table>
       </div>
 
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Execution Quality &amp; Market Impact Analytics</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Square-Root Law (Almgren-Chriss Framework) &amp; Implementation Shortfall Attribution
+            </p>
+          </div>
+          <button class="action-btn" onclick="refreshImpactData(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+            ⚡ Re-Calculate TCA
+          </button>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Average Fill Slippage</h3>
+            <div id="impact-kpi-slippage" class="val" style="color:var(--navy);">—</div>
+            <div class="sub">Basis Points (bps) vs Ref Price</div>
+          </div>
+          <div class="card">
+            <h3>Implementation Shortfall</h3>
+            <div id="impact-kpi-shortfall" class="val" style="color:var(--amber);">—</div>
+            <div class="sub">Total Execution Drag (INR)</div>
+          </div>
+          <div class="card">
+            <h3>Avg Bar Participation</h3>
+            <div id="impact-kpi-participation" class="val" style="color:var(--green);">—</div>
+            <div class="sub">Order Qty / 1m Bar Volume</div>
+          </div>
+          <div class="card">
+            <h3>Total Execution Friction</h3>
+            <div id="impact-kpi-friction" class="val" style="color:var(--red);">—</div>
+            <div class="sub">Brokerage + Taxes + Shortfall</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:0.5rem;">Symbol-Level Execution Quality Breakdown</h3>
+        <div id="impact-symbols-container" style="overflow-x:auto;">
+          <p style="color:var(--muted); font-size:0.85rem;">Loading execution quality breakdown...</p>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Executed Paper Orders &amp; Audit Log</h2>
         <table>
@@ -953,6 +995,9 @@
       // 11. Portfolio VaR & CVaR Risk Engine
       refreshVaRData();
 
+      // 12. Execution Quality & Market Impact Analytics
+      refreshImpactData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1015,6 +1060,49 @@
         }
       } catch (err) {
         console.error('Failed to load VaR metrics', err);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshImpactData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Calculating...';
+        btn.disabled = true;
+      }
+      try {
+        const imp = await fetchJson('/execution/impact');
+        if (imp && imp.summary) {
+          const s = imp.summary;
+          setElText('impact-kpi-slippage', `${Number(s.avg_slippage_bps).toFixed(2)} bps`);
+          setElText('impact-kpi-shortfall', `₹${Number(s.total_implementation_shortfall_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('impact-kpi-participation', `${Number(s.avg_participation_rate_pct).toFixed(3)}%`);
+          setElText('impact-kpi-friction', `₹${Number(s.total_fees_and_impact_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+
+          const container = document.getElementById('impact-symbols-container');
+          if (container && imp.by_symbol) {
+            const syms = Object.keys(imp.by_symbol);
+            if (syms.length > 0) {
+              let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Symbol</th><th>Orders</th><th>Shares</th><th>Turnover (INR)</th><th>Fees</th><th>Implementation Shortfall</th><th>Avg Slippage</th></tr></thead><tbody>';
+              syms.forEach(sym => {
+                const d = imp.by_symbol[sym];
+                html += `<tr><td><strong>${sym}</strong></td><td>${d.orders_count}</td><td>${d.total_shares}</td><td>₹${Number(d.total_turnover_inr).toLocaleString('en-IN', {minimumFractionDigits:2})}</td><td>₹${Number(d.total_fees_inr).toFixed(2)}</td><td style="color:${Number(d.implementation_shortfall_inr) >= 0 ? 'var(--red)' : 'var(--green)'};">₹${Number(d.implementation_shortfall_inr).toFixed(2)}</td><td><strong>${Number(d.avg_slippage_bps).toFixed(2)} bps</strong></td></tr>`;
+              });
+              html += '</tbody></table>';
+              container.innerHTML = html;
+            } else {
+              container.innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">No historical orders executed yet.</p>';
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load Execution Impact data', err);
       } finally {
         if (btn) {
           btn.textContent = orig;

@@ -17,6 +17,7 @@ from app.core.database import (
     init_db,
 )
 from app.execution.costs import NSECostEngine
+from app.execution.impact import ExecutionAnalyticsEngine
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
@@ -468,6 +469,58 @@ def get_portfolio_var_endpoint(
             for s1, inner in report.correlation_matrix.items()
         },
     }
+
+
+@router.get("/execution/impact")
+def get_execution_impact_endpoint(
+    symbol: str | None = None,
+    side: str = "BUY",
+    quantity: int = 100,
+    price: float | None = None,
+):
+  db_file = _cfg.database_url.replace("sqlite:///", "")
+  engine = ExecutionAnalyticsEngine(db_file)
+  summary = engine.analyze_historical_executions()
+
+  sim_breakdown = None
+  if symbol:
+    ref_p = Decimal(str(price)) if price is not None else Decimal("1000.00")
+    b = engine.compute_order_market_impact(
+        symbol=symbol.upper(),
+        side=side,
+        quantity=quantity,
+        raw_price=ref_p,
+    )
+    sim_breakdown = {
+        "symbol": b.symbol,
+        "side": b.side,
+        "quantity": b.quantity,
+        "raw_arrival_price": str(b.raw_arrival_price),
+        "reference_volume": b.reference_volume,
+        "participation_rate_pct": str(b.participation_rate_pct),
+        "daily_volatility_pct": str(b.daily_volatility_pct),
+        "temporary_impact_pct": str(b.temporary_impact_pct),
+        "temporary_impact_inr": str(b.temporary_impact_inr),
+        "permanent_impact_pct": str(b.permanent_impact_pct),
+        "permanent_impact_inr": str(b.permanent_impact_inr),
+        "total_impact_bps": str(b.total_impact_bps),
+        "effective_execution_price": str(b.effective_execution_price),
+        "implementation_shortfall_inr": str(b.implementation_shortfall_inr),
+        "is_participation_compliant": b.is_participation_compliant,
+        "max_allowed_participation_pct": str(b.max_allowed_participation_pct),
+    }
+
+  return {
+      "summary": {
+          "total_orders_analyzed": summary.total_orders_analyzed,
+          "avg_slippage_bps": str(summary.avg_slippage_bps),
+          "total_implementation_shortfall_inr": str(summary.total_implementation_shortfall_inr),
+          "avg_participation_rate_pct": str(summary.avg_participation_rate_pct),
+          "total_fees_and_impact_inr": str(summary.total_fees_and_impact_inr),
+      },
+      "by_symbol": summary.by_symbol,
+      "simulation": sim_breakdown,
+  }
 
 
 @router.get("/", response_class=HTMLResponse)

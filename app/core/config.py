@@ -27,6 +27,8 @@ class RiskProfileConfig(BaseModel):
   adaptive_atr_trail_multiplier: Decimal = Field(default=Decimal("2.0"))
   require_portfolio_var_cap: bool = Field(default=False)
   max_portfolio_var_95_pct: Decimal = Field(default=Decimal("0.025"))
+  require_participation_rate_cap: bool = Field(default=False)
+  max_participation_rate_pct: Decimal = Field(default=Decimal("0.05"))
 
 
 class StrategyConfigModel(BaseModel):
@@ -66,6 +68,9 @@ class CostProfileConfig(BaseModel):
   gst_pct: Decimal
   half_spread_pct: Decimal
   slippage_pct: Decimal
+  enable_market_impact: bool = Field(default=False)
+  impact_coefficient_eta: Decimal = Field(default=Decimal("0.5"))
+  impact_coefficient_gamma: Decimal = Field(default=Decimal("0.25"))
 
 
 class AppConfig(BaseModel):
