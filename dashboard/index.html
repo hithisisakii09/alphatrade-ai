@@ -344,10 +344,66 @@
           </tbody>
         </table>
       </div>
+
+      <div class="section-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <h2 style="margin:0;">Real-Time Intraday Net Equity Curve (MTM)</h2>
+          <span id="equity-curve-summary" style="font-size:0.85rem; color:var(--muted);">Tracking minute-by-minute MTM equity progression</span>
+        </div>
+        <div id="equity-chart-container" style="width:100%; height:180px; background:#fff; border-radius:6px; border:1px solid var(--border); padding:10px; position:relative; box-sizing:border-box;">
+          <svg id="equity-svg" width="100%" height="100%" style="overflow:visible;"></svg>
+        </div>
+      </div>
     </section>
 
     <!-- 3. Orders & Fills -->
     <section id="view-orders" class="view-panel">
+      <div class="kpi-grid" style="margin-bottom:1.5rem;">
+        <div class="card">
+          <h3>Win Rate (Closed)</h3>
+          <div id="ana-win-rate" class="val">--</div>
+          <div class="sub"><span id="ana-trades-summary">0 trades</span> • Payoff: <span id="ana-payoff">--</span></div>
+        </div>
+        <div class="card">
+          <h3>Profit Factor</h3>
+          <div id="ana-profit-factor" class="val">--</div>
+          <div class="sub">Gross Wins / Gross Losses</div>
+        </div>
+        <div class="card">
+          <h3>Avg MFE (Upside Peak)</h3>
+          <div id="ana-avg-mfe" class="val" style="color:var(--green);">--</div>
+          <div class="sub">Max Favorable Excursion (R)</div>
+        </div>
+        <div class="card">
+          <h3>Avg MAE (Adverse Heat)</h3>
+          <div id="ana-avg-mae" class="val" style="color:var(--amber);">--</div>
+          <div class="sub">Max Adverse Excursion (R)</div>
+        </div>
+      </div>
+
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <h2 style="margin:0;">Sector Performance &amp; Risk Attribution</h2>
+          <a href="/reports/journal.csv" download class="refresh-btn" style="background:var(--navy); color:#fff; text-decoration:none; display:inline-block; padding:0.4rem 0.8rem; font-weight:600;">📥 Export Trade Journal (.CSV)</a>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Sector</th>
+              <th>Trades</th>
+              <th>Wins</th>
+              <th>Losses</th>
+              <th>Win Rate</th>
+              <th>Total Fees</th>
+              <th>Net P&amp;L (INR)</th>
+            </tr>
+          </thead>
+          <tbody id="sector-tbody">
+            <tr><td colspan="7" style="text-align:center; color:var(--muted);">Loading sector analytics...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="section-card">
         <h2>Executed Paper Orders &amp; Audit Log</h2>
         <table>
@@ -780,7 +836,94 @@
         }
       }
 
+      // 8. Snapshots & Equity Curve
+      const snapData = await fetchJson('/portfolio/snapshots?limit=100');
+      if (snapData && snapData.snapshots) {
+        renderEquityCurve(snapData.snapshots);
+      }
+
+      // 9. Analytics & Sector Attribution
+      const anaData = await fetchJson('/reports/analytics');
+      if (anaData) {
+        setElText('ana-win-rate', `${Number(anaData.win_rate_pct).toFixed(1)}%`);
+        setElText('ana-trades-summary', `${anaData.closed_trades} closed / ${anaData.total_trades} total`);
+        setElText('ana-payoff', `${Number(anaData.payoff_ratio).toFixed(2)}x`);
+        setElText('ana-profit-factor', Number(anaData.profit_factor).toFixed(2));
+        setElText('ana-avg-mfe', `+${Number(anaData.avg_mfe_r).toFixed(2)} R`);
+        setElText('ana-avg-mae', `-${Number(anaData.avg_mae_r).toFixed(2)} R`);
+
+        const secTbody = document.getElementById('sector-tbody');
+        if (secTbody && anaData.sector_breakdown && anaData.sector_breakdown.length > 0) {
+          secTbody.innerHTML = anaData.sector_breakdown.map(s => `
+            <tr>
+              <td><strong>${s.sector}</strong></td>
+              <td>${s.trade_count}</td>
+              <td><span style="color:var(--green); font-weight:600;">${s.wins}</span></td>
+              <td><span style="color:var(--red); font-weight:600;">${s.losses}</span></td>
+              <td>${Number(s.win_rate_pct).toFixed(1)}%</td>
+              <td>₹${Number(s.total_fees_inr).toFixed(2)}</td>
+              <td style="font-weight:600; color:${Number(s.net_pnl_inr) >= 0 ? 'var(--green)' : 'var(--red)'};">
+                ${Number(s.net_pnl_inr) >= 0 ? '+' : ''}₹${Number(s.net_pnl_inr).toFixed(2)}
+              </td>
+            </tr>
+          `).join('');
+        }
+      }
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
+    }
+
+    function renderEquityCurve(snapshots) {
+      const svg = document.getElementById('equity-svg');
+      if (!svg) return;
+      if (!snapshots || snapshots.length < 2) {
+        svg.innerHTML = '<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="12">Collecting intraday MTM equity snapshots...</text>';
+        return;
+      }
+      const vals = snapshots.map(s => Number(s.net_equity_inr));
+      const minVal = Math.min(...vals, 99000);
+      const maxVal = Math.max(...vals, 101000);
+      const range = (maxVal - minVal) || 1;
+
+      const w = svg.clientWidth || 800;
+      const h = svg.clientHeight || 160;
+      const padTop = 15;
+      const padBottom = 25;
+      const padLeft = 45;
+      const padRight = 20;
+
+      const chartW = Math.max(10, w - padLeft - padRight);
+      const chartH = Math.max(10, h - padTop - padBottom);
+
+      const pts = snapshots.map((s, idx) => {
+        const x = padLeft + (idx / (snapshots.length - 1)) * chartW;
+        const y = padTop + chartH - ((Number(s.net_equity_inr) - minVal) / range) * chartH;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+
+      const polylineStr = pts.join(' ');
+      const areaPts = `${padLeft},${padTop + chartH} ${polylineStr} ${padLeft + chartW},${padTop + chartH}`;
+
+      const baseY = padTop + chartH - ((100000 - minVal) / range) * chartH;
+      const latestEq = Number(snapshots[snapshots.length - 1].net_equity_inr);
+      const latestPnl = latestEq - 100000;
+      const strokeColor = latestPnl >= 0 ? 'var(--teal)' : 'var(--amber)';
+
+      setElText('equity-curve-summary', `Min: ₹${minVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Max: ₹${maxVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Current: ₹${latestEq.toLocaleString('en-IN', {minimumFractionDigits:2})} (${latestPnl >= 0 ? '+' : ''}₹${latestPnl.toFixed(2)})`);
+
+      svg.innerHTML = `
+        <defs>
+          <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${latestPnl >= 0 ? '#0d9488' : '#d97706'}" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="${latestPnl >= 0 ? '#0d9488' : '#d97706'}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <line x1="${padLeft}" y1="${baseY}" x2="${padLeft + chartW}" y2="${baseY}" stroke="#cbd5e1" stroke-dasharray="4,4" stroke-width="1.2"/>
+        <text x="${padLeft + 5}" y="${baseY - 4}" fill="#64748b" font-size="10">₹1,00,000 Base</text>
+        <polygon points="${areaPts}" fill="url(#eqGrad)" />
+        <polyline points="${polylineStr}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${pts[pts.length - 1].split(',')[0]}" cy="${pts[pts.length - 1].split(',')[1]}" r="4" fill="${strokeColor}" stroke="#fff" stroke-width="2"/>
+      `;
     }
 
     function renderBtTrades(idx) {

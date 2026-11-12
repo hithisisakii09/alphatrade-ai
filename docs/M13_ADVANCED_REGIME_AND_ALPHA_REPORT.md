@@ -114,3 +114,4 @@ During the live forward paper session on 2026-11-12:
   - Max simultaneous open positions (2) reached.
   - Subsequent candidate breakouts (`INFY`, `SBIN`, `BHARTIARTL`) were safely and deterministically rejected with `MAX_OPEN_POSITIONS_REACHED`.
   - Ledger Reconciled: Zero unallocated cash drift, 100% pure Decimal accounting.
+

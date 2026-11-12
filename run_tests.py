@@ -12,6 +12,7 @@ from tests.unit import test_angel_provider as t_angel
 from tests.unit import test_notifications as t_notify
 from tests.unit import test_volatility_and_regime as t_vol
 from tests.unit import test_macro_trend_and_m13 as t_m13
+from tests.unit import test_analytics_and_journal_m14 as t_m14
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -78,6 +79,12 @@ def run_all() -> int:
           t_m13.test_two_day_high_breakout_filter,
           t_m13.test_adaptive_atr_trailing_stop_activation,
           t_m13.test_m13_end_to_end_strategy_rejection_of_counter_trend,
+      ]),
+      ("unit/test_analytics_and_journal_m14.py", [
+          t_m14.test_compute_position_mae_mfe,
+          t_m14.test_compute_trade_analytics_aggregation,
+          t_m14.test_generate_trade_journal_csv,
+          t_m14.test_m14_api_routes_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (54/54 tests passing)
+# 2. Run the unified zero-trust test suite (58/58 tests passing)
 python run_tests.py
 # or: pytest -v
 

@@ -204,3 +204,4 @@ def test_m13_end_to_end_strategy_rejection_of_counter_trend():
   )
   assert res_aligned.triggered is True
   assert res_aligned.signal_id is not None
+

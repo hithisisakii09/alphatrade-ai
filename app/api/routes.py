@@ -2,19 +2,21 @@
 
 from datetime import datetime, timezone
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from fastapi.responses import HTMLResponse
-from app.core.clock import NSECalendar
+from app.core.clock import NSECalendar, to_ist
 from app.core.config import load_app_config
 from app.core.database import (
     DataQualityEventRecord,
     OrderRecord,
+    PortfolioSnapshotRecord,
     PositionRecord,
     TradeSignalRecord,
     init_db,
 )
 from app.execution.costs import NSECostEngine
 from app.portfolio.ledger import PortfolioLedger
+from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
 from app.risk.engine import RiskEngine
 from app.services.daily_runner import ScheduledDailyRunner
@@ -196,6 +198,69 @@ def get_portfolio():
         "reconciliation_message": msg,
         "candle_cache": _daily_runner.candle_cache.get_cache_stats(),
     }
+
+
+@router.get("/portfolio/snapshots")
+def get_portfolio_snapshots(limit: int = 150):
+  with _SessionLocal() as db:
+    snaps = (
+        db.query(PortfolioSnapshotRecord)
+        .order_by(PortfolioSnapshotRecord.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "snapshots": [
+            {
+                "id": s.id,
+                "timestamp_ist": to_ist(s.timestamp_utc).strftime("%H:%M:%S") if s.timestamp_utc else "",
+                "timestamp_utc": s.timestamp_utc.isoformat() if s.timestamp_utc else None,
+                "net_equity_inr": str(s.net_equity_inr),
+                "cash_balance_inr": str(s.cash_balance_inr),
+                "deployed_exposure_inr": str(s.deployed_exposure_inr),
+                "realized_pnl_inr": str(s.realized_pnl_inr),
+                "unrealized_pnl_inr": str(s.unrealized_pnl_inr),
+                "total_fees_inr": str(s.total_fees_inr),
+            }
+            for s in reversed(snaps)
+        ]
+    }
+
+
+@router.get("/reports/analytics")
+def get_trade_analytics_endpoint(session_date: str | None = None):
+  with _SessionLocal() as db:
+    return compute_trade_analytics(db, session_date=session_date)
+
+
+@router.get("/reports/journal")
+def get_trade_journal_endpoint(session_date: str | None = None):
+  with _SessionLocal() as db:
+    analytics = compute_trade_analytics(db, session_date=session_date)
+    return {
+        "summary": {
+            "total_trades": analytics["total_trades"],
+            "win_rate_pct": analytics["win_rate_pct"],
+            "profit_factor": analytics["profit_factor"],
+            "payoff_ratio": analytics["payoff_ratio"],
+            "avg_mfe_r": analytics["avg_mfe_r"],
+            "avg_mae_r": analytics["avg_mae_r"],
+            "capture_efficiency_pct": analytics["capture_efficiency_pct"],
+        },
+        "journal": analytics["trades"],
+    }
+
+
+@router.get("/reports/journal.csv")
+def get_trade_journal_csv_endpoint(session_date: str | None = None):
+  with _SessionLocal() as db:
+    csv_data = generate_trade_journal_csv(db, session_date=session_date)
+    fn = f"alphatrade_journal_{session_date}.csv" if session_date else "alphatrade_journal_all.csv"
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={fn}"},
+    )
 
 
 @router.get("/reports/daily")
