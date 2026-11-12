@@ -22,6 +22,7 @@ from app.reporting.analytics import compute_trade_analytics, generate_trade_jour
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
 from app.research.monte_carlo import run_monte_carlo_resampling
 from app.risk.engine import RiskEngine
+from app.risk.var import PortfolioVaREngine
 from app.services.daily_runner import ScheduledDailyRunner
 
 router = APIRouter()
@@ -398,6 +399,75 @@ def get_monte_carlo_endpoint(
         seed=seed,
     )
     return res.to_dict()
+
+
+@router.get("/risk/var")
+def get_portfolio_var_endpoint(
+    symbols: str | None = None,
+    lookback_bars: int = 1500,
+):
+  from app.core.money import to_decimal
+  prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+  with _SessionLocal() as db:
+    ledger = PortfolioLedger(db, prof.reference_capital)
+    cash_bal = ledger.get_cash_balance()
+    deployed = ledger.get_deployed_exposure()
+    unrealized = ledger.get_daily_unrealized_pnl()
+    total_eq = cash_bal + deployed + unrealized
+    holdings: dict[str, Decimal] = {}
+
+    if symbols:
+      sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+      equal_weight = total_eq / Decimal(len(sym_list)) if sym_list else Decimal("0")
+      for s in sym_list:
+        holdings[s] = equal_weight
+    else:
+      open_positions = db.query(PositionRecord).filter(PositionRecord.status == "OPEN").all()
+      for p in open_positions:
+        notional = to_decimal(p.quantity) * to_decimal(p.entry_price)
+        holdings[p.symbol] = holdings.get(p.symbol, Decimal("0")) + notional
+
+    db_file = _cfg.database_url.replace("sqlite:///", "")
+    engine = PortfolioVaREngine(db_file)
+    report = engine.compute_portfolio_risk(
+        holdings=holdings,
+        total_equity_inr=total_eq,
+        lookback_bars=lookback_bars,
+    )
+
+    return {
+        "timestamp_utc": report.timestamp_utc.isoformat(),
+        "total_equity_inr": str(report.total_equity_inr),
+        "total_exposure_inr": str(report.total_exposure_inr),
+        "holdings_count": report.metrics.holdings_count,
+        "metrics": {
+            "portfolio_volatility_daily_pct": str(report.metrics.portfolio_volatility_daily_pct),
+            "var_95_pct": str(report.metrics.var_95_pct),
+            "var_95_inr": str(report.metrics.var_95_inr),
+            "var_99_pct": str(report.metrics.var_99_pct),
+            "var_99_inr": str(report.metrics.var_99_inr),
+            "cvar_95_pct": str(report.metrics.cvar_95_pct),
+            "cvar_95_inr": str(report.metrics.cvar_95_inr),
+            "cvar_99_pct": str(report.metrics.cvar_99_pct),
+            "cvar_99_inr": str(report.metrics.cvar_99_inr),
+            "cf_var_95_pct": str(report.metrics.cf_var_95_pct),
+            "cf_var_95_inr": str(report.metrics.cf_var_95_inr),
+            "cf_var_99_pct": str(report.metrics.cf_var_99_pct),
+            "cf_var_99_inr": str(report.metrics.cf_var_99_inr),
+            "undiversified_var_95_inr": str(report.metrics.undiversified_var_95_inr),
+            "diversification_benefit_pct": str(report.metrics.diversification_benefit_pct),
+            "portfolio_skewness": str(report.metrics.portfolio_skewness),
+            "portfolio_excess_kurtosis": str(report.metrics.portfolio_excess_kurtosis),
+        },
+        "weights": {s: str(w) for s, w in report.weights.items()},
+        "individual_volatilities_daily_pct": {
+            s: str(v) for s, v in report.individual_volatilities_daily_pct.items()
+        },
+        "correlation_matrix": {
+            s1: {s2: str(c) for s2, c in inner.items()}
+            for s1, inner in report.correlation_matrix.items()
+        },
+    }
 
 
 @router.get("/", response_class=HTMLResponse)

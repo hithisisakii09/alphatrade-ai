@@ -53,10 +53,12 @@ class RiskEngine:
       liquidation_start_ist: str = "15:00",
       liquidation_deadline_ist: str = "15:15",
       registry: Any = None,
+      var_engine: Any = None,
   ):
     self.profile = profile
     self.cost_engine = cost_engine
     self.registry = registry
+    self.var_engine = var_engine
     self.entry_cutoff = time.fromisoformat(entry_cutoff_ist)
     self.liquidation_start = time.fromisoformat(liquidation_start_ist)
     self.liquidation_deadline = time.fromisoformat(liquidation_deadline_ist)
@@ -373,6 +375,37 @@ class RiskEngine:
               f"qty_by_capital={qty_by_capital} at price {entry_p})."
           ),
       )
+
+    # 6b. Portfolio Value-at-Risk (VaR) Gate
+    if getattr(self.profile, "require_portfolio_var_cap", False) and self.var_engine is not None:
+      simulated_holdings: dict[str, Decimal] = {}
+      for op in open_positions_Symbols:
+        simulated_holdings[op] = round_paise(cap / Decimal(max(1, self.profile.max_open_positions)))
+      simulated_holdings[symbol] = round_paise(Decimal(final_qty) * entry_p)
+
+      var_report = self.var_engine.compute_portfolio_risk(
+          holdings=simulated_holdings,
+          total_equity_inr=cap,
+      )
+      max_allowed_var = round_paise(
+          cap * getattr(self.profile, "max_portfolio_var_95_pct", Decimal("0.025"))
+      )
+      if var_report.metrics.var_95_inr > max_allowed_var:
+        return RiskApprovalDecision(
+            approved=False,
+            reason_code="PORTFOLIO_VAR_LIMIT_EXCEEDED",
+            approved_quantity=0,
+            initial_stop_price=levels.initial_stop_price,
+            trailing_activation_price=trailing_activation_p,
+            risk_budget_inr=risk_budget,
+            estimated_roundtrip_cost_inr=Decimal("0.00"),
+            cost_to_risk_ratio=Decimal("0.0000"),
+            explanation=(
+                f"Rejected: Projected portfolio 95% VaR ₹{var_report.metrics.var_95_inr} "
+                f"({var_report.metrics.var_95_pct * 100:.2f}%) exceeds limit ₹{max_allowed_var} "
+                f"({getattr(self.profile, 'max_portfolio_var_95_pct', Decimal('0.025')) * 100:.2f}%)."
+            ),
+        )
 
     # 7. Cost-to-risk ratio check
     actual_trade_risk_1r = round_paise(Decimal(final_qty) * levels.stop_distance_per_share)

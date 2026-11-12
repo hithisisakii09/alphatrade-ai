@@ -15,6 +15,7 @@ from tests.unit import test_macro_trend_and_m13 as t_m13
 from tests.unit import test_analytics_and_journal_m14 as t_m14
 from tests.unit import test_monte_carlo_m15 as t_m15
 from tests.unit import test_vwap_bands_and_m16 as t_m16
+from tests.unit import test_var_and_cvar_m17 as t_m17
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -98,6 +99,14 @@ def run_all() -> int:
           t_m16.test_compute_session_vwap_std_calculation,
           t_m16.test_check_vwap_breakout_exhaustion_filter,
           t_m16.test_m16_end_to_end_strategy_rejection_of_exhausted_breakout,
+      ]),
+      ("unit/test_var_and_cvar_m17.py", [
+          t_m17.test_returns_and_series_statistics,
+          t_m17.test_cross_asset_covariance_and_correlation,
+          t_m17.test_cornish_fisher_quantile_expansion,
+          t_m17.test_portfolio_var_cvar_diversification_benefit,
+          t_m17.test_risk_engine_portfolio_var_gate,
+          t_m17.test_var_api_endpoint,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

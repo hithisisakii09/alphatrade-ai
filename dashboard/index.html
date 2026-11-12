@@ -461,6 +461,48 @@
           <div class="sub">Entry cutoff 14:30 • Forced EOD liquidation 15:00–15:15</div>
         </div>
       </div>
+
+      <div class="section-card" style="margin-top: 1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Institutional Portfolio Value-at-Risk (VaR) &amp; Expected Shortfall (CVaR)</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Pure-Decimal Basel III / FRTB Risk Quantification across Active Holdings (1-Day Horizon)
+            </p>
+          </div>
+          <button class="action-btn" onclick="refreshVaRData(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+            ⚡ Re-Calculate VaR
+          </button>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>95% Daily VaR</h3>
+            <div id="var-kpi-95-inr" class="val" style="color:var(--amber);">—</div>
+            <div id="var-sub-95-pct" class="sub">Parametric 1-Day Horizon</div>
+          </div>
+          <div class="card">
+            <h3>95% Expected Shortfall (CVaR)</h3>
+            <div id="var-kpi-cvar-95" class="val" style="color:var(--red);">—</div>
+            <div class="sub">Tail Conditional Expectation</div>
+          </div>
+          <div class="card">
+            <h3>99% Tail VaR / CVaR</h3>
+            <div id="var-kpi-99-inr" class="val" style="color:var(--navy);">—</div>
+            <div id="var-sub-99-cvar" class="sub">Extreme Loss Horizon</div>
+          </div>
+          <div class="card">
+            <h3>Diversification Benefit</h3>
+            <div id="var-kpi-div-benefit" class="val" style="color:var(--green);">—</div>
+            <div id="var-sub-div-undiv" class="sub">Undiversified vs Portfolio VaR</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:0.5rem;">Active Cross-Asset Correlation &amp; Exposure Distribution</h3>
+        <div id="var-matrix-container" style="overflow-x:auto;">
+          <p style="color:var(--muted); font-size:0.85rem;">Calculating cross-asset covariance matrix...</p>
+        </div>
+      </div>
     </section>
 
     <!-- 5. APScheduler Runner -->
@@ -908,7 +950,77 @@
         refreshMonteCarloData();
       }
 
+      // 11. Portfolio VaR & CVaR Risk Engine
+      refreshVaRData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
+    }
+
+    async function refreshVaRData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Calculating...';
+        btn.disabled = true;
+      }
+      try {
+        const v = await fetchJson('/risk/var');
+        if (v && v.metrics) {
+          const m = v.metrics;
+          const var95 = Number(m.var_95_inr);
+          const var95Pct = (Number(m.var_95_pct) * 100).toFixed(2);
+          setElText('var-kpi-95-inr', `₹${var95.toLocaleString('en-IN', {minimumFractionDigits: 2})} (${var95Pct}%)`);
+          setElText('var-sub-95-pct', `Daily Vol: ${Number(m.portfolio_volatility_daily_pct).toFixed(2)}% • Skew: ${Number(m.portfolio_skewness).toFixed(1)}`);
+
+          const cvar95 = Number(m.cvar_95_inr);
+          const cvar95Pct = (Number(m.cvar_95_pct) * 100).toFixed(2);
+          setElText('var-kpi-cvar-95', `₹${cvar95.toLocaleString('en-IN', {minimumFractionDigits: 2})} (${cvar95Pct}%)`);
+
+          const var99 = Number(m.var_99_inr);
+          const cvar99 = Number(m.cvar_99_inr);
+          setElText('var-kpi-99-inr', `₹${var99.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('var-sub-99-cvar', `99% CVaR: ₹${cvar99.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+
+          const divBen = Number(m.diversification_benefit_pct).toFixed(1);
+          setElText('var-kpi-div-benefit', `${divBen}% Benefit`);
+          setElText('var-sub-div-undiv', `Undiversified VaR: ₹${Number(m.undiversified_var_95_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+
+          const container = document.getElementById('var-matrix-container');
+          if (container && v.correlation_matrix) {
+            const symbols = Object.keys(v.correlation_matrix);
+            if (symbols.length > 0) {
+              let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Symbol</th><th>Weight</th><th>Daily Vol</th>';
+              symbols.forEach(s => { html += `<th>${s}</th>`; });
+              html += '</tr></thead><tbody>';
+
+              symbols.forEach(s1 => {
+                const wt = v.weights && v.weights[s1] ? (Number(v.weights[s1]) * 100).toFixed(1) + '%' : '—';
+                const vol = v.individual_volatilities_daily_pct && v.individual_volatilities_daily_pct[s1] 
+                  ? Number(v.individual_volatilities_daily_pct[s1]).toFixed(2) + '%' : '—';
+                html += `<tr><td><strong>${s1}</strong></td><td>${wt}</td><td>${vol}</td>`;
+                symbols.forEach(s2 => {
+                  const corr = Number(v.correlation_matrix[s1][s2]);
+                  const color = corr === 1.0 ? 'var(--navy)' : (corr > 0.6 ? 'var(--red)' : (corr < 0.3 ? 'var(--green)' : 'var(--amber)'));
+                  html += `<td style="color:${color}; font-weight:600;">${corr >= 0 ? '+' : ''}${corr.toFixed(4)}</td>`;
+                });
+                html += '</tr>';
+              });
+              html += '</tbody></table>';
+              container.innerHTML = html;
+            } else {
+              container.innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">No open positions currently in portfolio.</p>';
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load VaR metrics', err);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
     }
 
     async function refreshMonteCarloData() {

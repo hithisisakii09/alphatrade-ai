@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (65/65 tests passing)
+# 2. Run the unified zero-trust test suite (71/71 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -26,7 +26,10 @@ python scripts/run_walk_forward_study.py --source HISTORICAL
 # 6. Run the Monte Carlo Bootstrap & Risk of Ruin simulator
 python scripts/run_monte_carlo.py --iterations 5000
 
-# 7. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 7. Run the Portfolio Value-at-Risk (VaR) & Expected Shortfall (CVaR) analyzer
+python scripts/run_var_analysis.py --symbols RELIANCE,TCS,INFY,HDFCBANK
+
+# 8. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 

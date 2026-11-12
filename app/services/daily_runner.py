@@ -40,6 +40,7 @@ from app.market.indicators import (
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.reports import generate_daily_report
 from app.risk.engine import RiskEngine
+from app.risk.var import PortfolioVaREngine
 from app.services.notifications import WebhookNotificationService
 from app.services.watchdog import FeedWatchdog
 from app.strategy.orb.engine import ORBStrategyEngine
@@ -180,6 +181,7 @@ class ScheduledDailyRunner:
     self.risk_profile = self.config.strategy.risk_profiles[self.config.active_risk_profile]
     self.cost_profile = self.config.costs[self.config.active_cost_profile]
     self.cost_engine = NSECostEngine(self.cost_profile)
+    self.var_engine = PortfolioVaREngine("alphatrade_v2.db")
     self.risk_engine = RiskEngine(
         self.risk_profile,
         self.cost_engine,
@@ -187,6 +189,7 @@ class ScheduledDailyRunner:
         liquidation_start_ist=self.config.strategy.liquidation_start_ist,
         liquidation_deadline_ist=self.config.strategy.liquidation_deadline_ist,
         registry=self.registry,
+        var_engine=self.var_engine,
     )
     self.strategy_engine = ORBStrategyEngine(self.config.strategy, self.registry)
     self.validator = CandleIngestionValidator()

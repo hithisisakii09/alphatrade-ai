@@ -25,6 +25,8 @@ class RiskProfileConfig(BaseModel):
   atr_volatility_multiplier: Decimal = Field(default=Decimal("1.5"))
   adaptive_atr_trailing: bool = Field(default=False)
   adaptive_atr_trail_multiplier: Decimal = Field(default=Decimal("2.0"))
+  require_portfolio_var_cap: bool = Field(default=False)
+  max_portfolio_var_95_pct: Decimal = Field(default=Decimal("0.025"))
 
 
 class StrategyConfigModel(BaseModel):
