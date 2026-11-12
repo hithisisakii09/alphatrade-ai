@@ -13,6 +13,7 @@ from tests.unit import test_notifications as t_notify
 from tests.unit import test_volatility_and_regime as t_vol
 from tests.unit import test_macro_trend_and_m13 as t_m13
 from tests.unit import test_analytics_and_journal_m14 as t_m14
+from tests.unit import test_monte_carlo_m15 as t_m15
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -85,6 +86,12 @@ def run_all() -> int:
           t_m14.test_compute_trade_analytics_aggregation,
           t_m14.test_generate_trade_journal_csv,
           t_m14.test_m14_api_routes_integration,
+      ]),
+      ("unit/test_monte_carlo_m15.py", [
+          t_m15.test_monte_carlo_empty_trade_pool,
+          t_m15.test_monte_carlo_deterministic_seed,
+          t_m15.test_monte_carlo_loss_pool_triggers_ruin,
+          t_m15.test_monte_carlo_api_endpoint,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

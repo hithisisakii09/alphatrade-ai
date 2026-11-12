@@ -538,6 +538,39 @@
         </div>
       </div>
 
+      <!-- Monte Carlo Robustness & Ruin Simulation Card -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <div>
+            <h2 style="margin:0;">Non-Parametric Monte Carlo Bootstrap &amp; Risk of Ruin Simulator</h2>
+            <span style="font-size:0.85rem; color:var(--muted);">Bootstrap permutations resampled with replacement across historical &amp; live trades</span>
+          </div>
+          <button class="refresh-btn" style="background:var(--teal); color:#fff; border-color:var(--teal);" onclick="runMonteCarloInBrowser(event)">🎲 Re-Run Monte Carlo</button>
+        </div>
+        <div class="kpi-grid">
+          <div class="card" style="background:var(--bg);">
+            <h3>Probability of Ruin (10% DD)</h3>
+            <div id="mc-ruin-prob" class="val" style="color:var(--green);">0.00%</div>
+            <div class="sub">Sample pool: <span id="mc-pool-size">-- trades</span></div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>Median Max Drawdown</h3>
+            <div id="mc-med-dd" class="val" style="color:var(--navy);">--</div>
+            <div class="sub">50th percentile across paths</div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>95th Pct Worst Drawdown</h3>
+            <div id="mc-p95-dd" class="val" style="color:var(--amber);">--</div>
+            <div class="sub">95% confidence lower bound</div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>Median Ending Equity</h3>
+            <div id="mc-med-equity" class="val" style="color:var(--green);">--</div>
+            <div class="sub">5th–95th range: <span id="mc-equity-range">--</span></div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Quantitative Backtest Runs &amp; Out-of-Sample Performance</h2>
         <table>
@@ -870,7 +903,46 @@
         }
       }
 
+      // 10. Monte Carlo Simulation Data (Fetch once or on demand)
+      if (!window._mcLoaded) {
+        refreshMonteCarloData();
+      }
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
+    }
+
+    async function refreshMonteCarloData() {
+      const mc = await fetchJson('/research/monte-carlo?iterations=1000');
+      if (mc) {
+        window._mcLoaded = true;
+        setElText('mc-ruin-prob', `${Number(mc.ruin_probability_pct).toFixed(2)}%`);
+        setElText('mc-pool-size', `${mc.sample_trade_count} trades`);
+        setElText('mc-med-dd', `${Number(mc.median_max_drawdown_pct).toFixed(2)}%`);
+        setElText('mc-p95-dd', `${Number(mc.p95_max_drawdown_pct).toFixed(2)}%`);
+        setElText('mc-med-equity', '₹' + Number(mc.median_ending_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0}));
+        setElText('mc-equity-range', `₹${Number(mc.p05_ending_equity_inr).toLocaleString('en-IN', {maximumFractionDigits:0})} – ₹${Number(mc.p95_ending_equity_inr).toLocaleString('en-IN', {maximumFractionDigits:0})}`);
+      }
+    }
+
+    async function runMonteCarloInBrowser(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Simulating...';
+        btn.disabled = true;
+      }
+      try {
+        await refreshMonteCarloData();
+        alert('Monte Carlo simulation updated successfully across 1,000 bootstrap iterations.');
+      } catch (e) {
+        alert('Monte Carlo error: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
     }
 
     function renderEquityCurve(snapshots) {

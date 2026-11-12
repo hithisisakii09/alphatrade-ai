@@ -1,12 +1,14 @@
 """Read-only FastAPI endpoints implementing all 11 specification routes."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 import os
 from fastapi import APIRouter, Response
 from fastapi.responses import HTMLResponse
 from app.core.clock import NSECalendar, to_ist
 from app.core.config import load_app_config
 from app.core.database import (
+    BacktestTradeRecord,
     DataQualityEventRecord,
     OrderRecord,
     PortfolioSnapshotRecord,
@@ -18,6 +20,7 @@ from app.execution.costs import NSECostEngine
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
+from app.research.monte_carlo import run_monte_carlo_resampling
 from app.risk.engine import RiskEngine
 from app.services.daily_runner import ScheduledDailyRunner
 
@@ -367,6 +370,34 @@ def trigger_runner_tick(symbols: str | None = None):
   sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()] if symbols else None
   summary = _daily_runner.job_intraday_tick(symbols=sym_list)
   return {"status": "SUCCESS", "summary": summary}
+
+
+@router.get("/research/monte-carlo")
+def get_monte_carlo_endpoint(
+    source: str = "ALL",
+    iterations: int = 2000,
+    ruin_drawdown_pct: float = 0.10,
+    seed: int = 42,
+):
+  from app.core.money import to_decimal
+  with _SessionLocal() as db:
+    pnls: list[Decimal] = []
+    if source.upper() in ("LIVE", "ALL"):
+      positions = db.query(PositionRecord).filter(PositionRecord.status == "CLOSED").all()
+      pnls.extend(to_decimal(p.realized_pnl_inr) for p in positions)
+    if source.upper() in ("BACKTEST", "ALL"):
+      bt_trades = db.query(BacktestTradeRecord).all()
+      pnls.extend(to_decimal(t.net_pnl_inr) for t in bt_trades)
+
+    prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+    res = run_monte_carlo_resampling(
+        trade_pnls=pnls,
+        starting_capital_inr=prof.reference_capital,
+        iterations=iterations,
+        ruin_drawdown_pct=Decimal(str(ruin_drawdown_pct)),
+        seed=seed,
+    )
+    return res.to_dict()
 
 
 @router.get("/", response_class=HTMLResponse)
