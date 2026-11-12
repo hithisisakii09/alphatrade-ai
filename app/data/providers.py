@@ -304,6 +304,15 @@ class AngelSmartAPIDataProvider:
           resp.raise_for_status()
           data = resp.json()
           if not data.get("status"):
+            msg = str(data.get("message", data))
+            err_code = str(data.get("errorcode", ""))
+            if ("token" in msg.lower() or "invalid" in msg.lower() or err_code == "AG8001") and self.password and attempt == 0:
+              logger.info("Angel One session token expired or invalid; re-authenticating via TOTP...")
+              self.login()
+              headers["Authorization"] = (
+                  self.jwt_token if self.jwt_token.startswith("Bearer ") else f"Bearer {self.jwt_token}"
+              )
+              continue
             raise ProviderDataError(f"Angel SmartAPI error: {data.get('message', data)}")
           raw_candles = data.get("data", []) or []
           return self.parse_angel_response(symbol, raw_candles)

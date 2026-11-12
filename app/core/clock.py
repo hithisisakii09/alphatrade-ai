@@ -49,7 +49,9 @@ class NSECalendar:
     self.liquidation_start = time.fromisoformat(data["liquidation_start"])
     self.liquidation_deadline = time.fromisoformat(data["liquidation_deadline"])
 
-  def is_trading_day(self, d: date) -> bool:
+  def is_trading_day(self, d: date | datetime) -> bool:
+    if isinstance(d, datetime):
+      d = to_ist(d).date()
     d_str = d.isoformat()
     if d_str in self.special_sessions:
       return True
@@ -57,7 +59,9 @@ class NSECalendar:
       return False
     return d_str not in self.holidays
 
-  def is_orb_eligible_session(self, d: date) -> bool:
+  def is_orb_eligible_session(self, d: date | datetime) -> bool:
+    if isinstance(d, datetime):
+      d = to_ist(d).date()
     d_str = d.isoformat()
     if d_str in self.special_sessions:
       return bool(self.special_sessions[d_str].get("allow_intraday_orb", False))
