@@ -1,7 +1,7 @@
 # AlphaTrade AI v2.0 — Engineering Progress & Gate Verification Log
 
-**Current Status:** **ALL MILESTONES M0 THROUGH M12 COMPLETE • Production Hardening, SQLite WAL Checkpointing, Feed Watchdog, Docker Orchestration & Disaster Recovery Verified (49/49 Tests Passing)**  
-**Last Updated:** 11 November 2026  
+**Current Status:** **ALL MILESTONES M0 THROUGH M13 COMPLETE • Production Hardening, Multi-Timeframe Trend Confirmation, 2-Day High Breakout, Adaptive ATR Trailing & Real-Time Forward Session Operational (54/54 Tests Passing)**  
+**Last Updated:** 12 November 2026  
 **Active Execution Mode:** Strictly `PAPER`  
 **Active Strategy Profile:** `STANDARD_RESEARCH_100K` (`INTRADAY_V2` Exit Mode)  
 **Active Data Provider:** `ANGEL_SMARTAPI` (NSE Cash Equities)  
@@ -104,9 +104,10 @@
 | **M10** | Live Forward Paper-Trading & Telemetry | `NEW` | **COMPLETE** | Live intraday tick state machine profiled with sub-millisecond execution timing (`avg_latency`: 4.82 ms, peak: 18.40 ms, compliant with $\le 500$ ms budget). Webhook notification service upgraded with non-blocking daemon background dispatch (`send_message_background()`), eliminating I/O delays during order execution. Telemetry summary exposed via `/runner/status`. 43/43 tests passing. Report in `docs/M10_FORWARD_PAPER_TRADING_REPORT.md`. |
 | **M11** | Volatility & Regime Adaptability | `NEW` | **COMPLETE** | Relative Volume ($\text{RVOL} \ge 1.50\times$) breakout filter enforced in strategy engine; Wilder's ATR(14) dynamic volatility sizing integrated into RiskEngine; sector concentration limit (`max_positions_per_sector: 1`) enforced across all 20 NIFTY liquid constituents. 46/46 tests passing. Report in `docs/M11_VOLATILITY_AND_REGIME_REPORT.md`. |
 | **M12** | Production Hardening & Disaster Recovery | `NEW` | **COMPLETE** | SQLite automated WAL checkpointing (`PRAGMA wal_checkpoint(TRUNCATE)`) and point-in-time online backup manager with SHA-256 integrity verification (`scripts/backup_manager.py`); real-time Feed Watchdog with market-hours dead-man's switch (180s stall threshold) fail-closing the risk kill switch (`app/services/watchdog.py`); hardened rootless Docker container (`appuser` UID 1000) and multi-mount Docker Compose orchestration validated. 49/49 tests passing. Report in `docs/M12_PRODUCTION_HARDENING_REPORT.md`. |
+| **M13** | Advanced Regime Confirmation & Adaptive ATR Trailing | `NEW` | **COMPLETE** | Multi-timeframe trend alignment (1-hour EMA-50) rejects counter-trend breakouts; 2-day high breakout confirmation filters range chop; dynamic Wilder's ATR trailing stop activation ($\text{Entry} + (\text{ATR} \times \text{Multiplier})$) replaces static percentage targets; persistent HTTP connection pooling reduces 10-symbol polling latency from 44s to ~4.5s; autonomous stall recovery callback automatically clears `STALE_OR_INVALID_MARKET_DATA` on tick resumption. 54/54 tests passing. Report in `docs/M13_ADVANCED_REGIME_AND_ALPHA_REPORT.md`. |
 
 ---
 
 ## 3. Summary of Development Verification
 
-Milestones M0 through M12 have been engineered, verified, and runtime-tested without mock persistence and conforming strictly to zero-trust standards. Empirical walk-forward validation on 348,453 authentic candles confirmed statistical sample eligibility ($\ge 100$ OOS trades). Live forward-trading loop, non-blocking webhook telemetry, regime-adaptive volatility controls, feed watchdog dead-man's switch, and cryptographically verified disaster recovery backups are fully operational with 49/49 tests passing. AlphaTrade AI v2.0 is fully verified for continuous automated paper trading.
+Milestones M0 through M13 have been engineered, verified, and runtime-tested without mock persistence and conforming strictly to zero-trust standards. Empirical walk-forward validation on 348,453 authentic candles confirmed statistical sample eligibility ($\ge 100$ OOS trades). Live forward-trading loop, non-blocking webhook telemetry, regime-adaptive volatility controls, feed watchdog dead-man's switch, cryptographically verified disaster recovery backups, higher-timeframe trend alignment, and persistent HTTP connection pooling are fully operational with 54/54 tests passing. AlphaTrade AI v2.0 is fully verified for continuous automated paper trading.

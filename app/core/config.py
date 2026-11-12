@@ -23,6 +23,8 @@ class RiskProfileConfig(BaseModel):
   max_cost_to_risk_ratio: Decimal
   max_positions_per_sector: int = Field(default=1)
   atr_volatility_multiplier: Decimal = Field(default=Decimal("1.5"))
+  adaptive_atr_trailing: bool = Field(default=False)
+  adaptive_atr_trail_multiplier: Decimal = Field(default=Decimal("2.0"))
 
 
 class StrategyConfigModel(BaseModel):
@@ -40,6 +42,10 @@ class StrategyConfigModel(BaseModel):
   entry_cutoff_ist: str
   liquidation_start_ist: str
   liquidation_deadline_ist: str
+  require_macro_trend_alignment: bool = Field(default=False)
+  macro_timeframe_minutes: int = Field(default=60)
+  macro_ema_period: int = Field(default=50)
+  require_two_day_high_breakout: bool = Field(default=False)
   risk_profiles: dict[str, RiskProfileConfig]
 
 

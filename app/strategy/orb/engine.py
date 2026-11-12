@@ -7,7 +7,11 @@ from app.core.clock import to_ist
 from app.core.config import StrategyConfigModel
 from app.data.instruments import InstrumentRegistry
 from app.data.models import CandleBar
-from app.market.indicators import OpeningRangeState
+from app.market.indicators import (
+    OpeningRangeState,
+    check_macro_trend_alignment,
+    check_two_day_high_breakout,
+)
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,8 @@ class ORBStrategyEngine:
       estimated_spread_pct: Decimal,
       prev_daily_close: Decimal,
       nifty_strongly_bearish: bool = False,
+      htf_ema: Decimal | None = None,
+      prev_day_high: Decimal | None = None,
   ) -> ORBSignalEvaluation:
     dt_ist = to_ist(bar_5m.timestamp_utc)
     session_date = dt_ist.date().isoformat()
@@ -212,6 +218,44 @@ class ORBStrategyEngine:
           rejection_reason="INSUFFICIENT_UPPER_CIRCUIT_HEADROOM",
           explanation=f"Upper circuit headroom {headroom_pct:.4f} < {self.config.min_upper_circuit_headroom_pct}.",
       )
+
+    # 10. Multi-timeframe macro trend alignment (e.g. 1h EMA-50)
+    if self.config.require_macro_trend_alignment:
+      aligned, trend_msg = check_macro_trend_alignment(bar_5m.close, htf_ema, direction="LONG")
+      if not aligned:
+        return ORBSignalEvaluation(
+            symbol=sym,
+            session_date=session_date,
+            timestamp_utc=bar_5m.timestamp_utc,
+            triggered=False,
+            signal_id=None,
+            signal_price=bar_5m.close,
+            orb_high=orb_state.orb_high,
+            orb_low=orb_state.orb_low,
+            vwap=vwap,
+            rvol=rvol,
+            rejection_reason="COUNTER_MACRO_TREND",
+            explanation=trend_msg,
+        )
+
+    # 11. Two-day high breakout confirmation
+    if self.config.require_two_day_high_breakout:
+      confirmed, high_msg = check_two_day_high_breakout(bar_5m.close, prev_day_high)
+      if not confirmed:
+        return ORBSignalEvaluation(
+            symbol=sym,
+            session_date=session_date,
+            timestamp_utc=bar_5m.timestamp_utc,
+            triggered=False,
+            signal_id=None,
+            signal_price=bar_5m.close,
+            orb_high=orb_state.orb_high,
+            orb_low=orb_state.orb_low,
+            vwap=vwap,
+            rvol=rvol,
+            rejection_reason="TWO_DAY_HIGH_NOT_BROKEN",
+            explanation=high_msg,
+        )
 
     sig_id = f"SIG_{sym}_{session_date}_{dt_ist.strftime('%H%M')}"
     return ORBSignalEvaluation(

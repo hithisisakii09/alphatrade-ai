@@ -31,6 +31,7 @@ from app.execution.costs import NSECostEngine
 from app.execution.paper_broker import PaperBroker
 from app.market.indicators import (
     compute_atr_series,
+    compute_higher_timeframe_ema,
     compute_opening_range,
     compute_session_vwap,
     compute_time_of_day_rvol,
@@ -629,6 +630,16 @@ class ScheduledDailyRunner:
             cum_vol = sum(b.volume for b in valid_bars)
             rvol = compute_time_of_day_rvol(cum_vol, [max(1, cum_vol // 2)])
 
+            htf_ema = (
+                compute_higher_timeframe_ema(
+                    valid_bars,
+                    htf_minutes=self.config.strategy.macro_timeframe_minutes,
+                    period=self.config.strategy.macro_ema_period,
+                )
+                if self.config.strategy.require_macro_trend_alignment
+                else None
+            )
+
             sig_eval = self.strategy_engine.evaluate_5m_bar(
                 bar_5m=latest_5m,
                 orb_state=orb_state,
@@ -637,6 +648,7 @@ class ScheduledDailyRunner:
                 estimated_spread_pct=Decimal("0.0005"),
                 prev_daily_close=prev_close,
                 nifty_strongly_bearish=False,
+                htf_ema=htf_ema,
             )
 
             if sig_eval.triggered and sig_eval.signal_id:

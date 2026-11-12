@@ -11,6 +11,7 @@ from tests.unit import test_risk_and_costs as t_risk
 from tests.unit import test_angel_provider as t_angel
 from tests.unit import test_notifications as t_notify
 from tests.unit import test_volatility_and_regime as t_vol
+from tests.unit import test_macro_trend_and_m13 as t_m13
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -70,6 +71,13 @@ def run_all() -> int:
           t_vol.test_sector_concentration_guard,
           t_vol.test_atr_adjusted_volatility_sizing,
           t_vol.test_rvol_threshold_filtering,
+      ]),
+      ("unit/test_macro_trend_and_m13.py", [
+          t_m13.test_higher_timeframe_ema_calculation,
+          t_m13.test_macro_trend_alignment_filter,
+          t_m13.test_two_day_high_breakout_filter,
+          t_m13.test_adaptive_atr_trailing_stop_activation,
+          t_m13.test_m13_end_to_end_strategy_rejection_of_counter_trend,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

@@ -332,13 +332,18 @@ class RiskEngine:
       vol_stop_dist = round_price(atr_value * atr_mult)
       effective_stop_dist = max(levels.stop_distance_per_share, vol_stop_dist)
 
+    trailing_activation_p = levels.trailing_activation_price
+    if getattr(self.profile, "adaptive_atr_trailing", False) and atr_value is not None and atr_value > Decimal("0"):
+      trail_mult = getattr(self.profile, "adaptive_atr_trail_multiplier", Decimal("2.0"))
+      trailing_activation_p = round_price(entry_p + (atr_value * trail_mult))
+
     if effective_stop_dist <= Decimal("0"):
       return RiskApprovalDecision(
           approved=False,
           reason_code="INVALID_STOP_DISTANCE",
           approved_quantity=0,
           initial_stop_price=levels.initial_stop_price,
-          trailing_activation_price=levels.trailing_activation_price,
+          trailing_activation_price=trailing_activation_p,
           risk_budget_inr=risk_budget,
           estimated_roundtrip_cost_inr=Decimal("0.00"),
           cost_to_risk_ratio=Decimal("0.0000"),
@@ -359,7 +364,7 @@ class RiskEngine:
           reason_code="QUANTITY_BELOW_ONE_SHARE",
           approved_quantity=0,
           initial_stop_price=levels.initial_stop_price,
-          trailing_activation_price=levels.trailing_activation_price,
+          trailing_activation_price=trailing_activation_p,
           risk_budget_inr=risk_budget,
           estimated_roundtrip_cost_inr=Decimal("0.00"),
           cost_to_risk_ratio=Decimal("0.0000"),
@@ -380,7 +385,7 @@ class RiskEngine:
           reason_code="COST_TO_RISK_RATIO_EXCEEDED",
           approved_quantity=0,
           initial_stop_price=levels.initial_stop_price,
-          trailing_activation_price=levels.trailing_activation_price,
+          trailing_activation_price=trailing_activation_p,
           risk_budget_inr=risk_budget,
           estimated_roundtrip_cost_inr=est_rt_cost,
           cost_to_risk_ratio=cost_to_risk,
@@ -395,13 +400,13 @@ class RiskEngine:
         reason_code="APPROVED",
         approved_quantity=final_qty,
         initial_stop_price=levels.initial_stop_price,
-        trailing_activation_price=levels.trailing_activation_price,
+        trailing_activation_price=trailing_activation_p,
         risk_budget_inr=risk_budget,
         estimated_roundtrip_cost_inr=est_rt_cost,
         cost_to_risk_ratio=cost_to_risk,
         explanation=(
             f"Approved {final_qty} shares of {symbol} at ref {entry_p}; "
-            f"stop={levels.initial_stop_price}, trail_act={levels.trailing_activation_price}, "
+            f"stop={levels.initial_stop_price}, trail_act={trailing_activation_p}, "
             f"cost/risk={cost_to_risk * 100:.1f}%."
         ),
     )

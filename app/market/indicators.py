@@ -137,3 +137,56 @@ def compute_time_of_day_rvol(
   if med_vol <= Decimal("0"):
     return Decimal("1.0000")
   return round_price(Decimal(current_cum_volume) / med_vol)
+
+
+def compute_higher_timeframe_ema(
+    bars_1m: list[CandleBar],
+    htf_minutes: int = 60,
+    period: int = 50,
+) -> Decimal | None:
+  """Aggregates 1m bars into higher timeframe bars (e.g. 60m / 1h) and returns the latest EMA(period)."""
+  from app.data.validator import aggregate_1m_to_nm
+  if not bars_1m:
+    return None
+  htf_bars = aggregate_1m_to_nm(bars_1m, htf_minutes)
+  if len(htf_bars) < period:
+    if len(htf_bars) >= 3:
+      return round_price(sum(b.close for b in htf_bars) / Decimal(len(htf_bars)))
+    return None
+  closes = [b.close for b in htf_bars]
+  ema_series = compute_ema_series(closes, period)
+  return ema_series[-1]
+
+
+def check_macro_trend_alignment(
+    current_price: Decimal,
+    htf_ema: Decimal | None,
+    direction: str = "LONG",
+) -> tuple[bool, str]:
+  """Verifies whether the current breakout aligns with the higher timeframe macro trend."""
+  if htf_ema is None:
+    return True, "HTF_EMA_UNAVAILABLE_PERMISSIVE"
+  curr = to_decimal(current_price)
+  ema = to_decimal(htf_ema)
+  if direction.upper() == "LONG":
+    if curr >= ema:
+      return True, f"MACRO_UPTREND_ALIGNED: Price {curr} >= 1h EMA {ema}"
+    return False, f"COUNTER_TREND_FILTERED: Price {curr} < 1h EMA {ema}"
+  else:
+    if curr <= ema:
+      return True, f"MACRO_DOWNTREND_ALIGNED: Price {curr} <= 1h EMA {ema}"
+    return False, f"COUNTER_TREND_FILTERED: Price {curr} > 1h EMA {ema}"
+
+
+def check_two_day_high_breakout(
+    current_price: Decimal,
+    prev_day_high: Decimal | None,
+) -> tuple[bool, str]:
+  """Checks if the breakout is confirmed by surpassing the previous session's high."""
+  if prev_day_high is None:
+    return True, "PREV_DAY_HIGH_UNAVAILABLE_PERMISSIVE"
+  curr = to_decimal(current_price)
+  pdh = to_decimal(prev_day_high)
+  if curr > pdh:
+    return True, f"TWO_DAY_HIGH_CONFIRMED: Price {curr} > Prev High {pdh}"
+  return False, f"TWO_DAY_HIGH_REJECTED: Price {curr} <= Prev High {pdh}"
