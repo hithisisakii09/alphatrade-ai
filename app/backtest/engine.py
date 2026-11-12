@@ -19,6 +19,7 @@ from app.market.indicators import (
     compute_higher_timeframe_ema,
     compute_opening_range,
     compute_session_vwap,
+    compute_session_vwap_std,
     compute_time_of_day_rvol,
 )
 from app.portfolio.ledger import PortfolioLedger
@@ -268,6 +269,11 @@ class EventDrivenBacktester:
             continue
           latest_5m = bars_5m[-1]
           vwap = compute_session_vwap(session_bars)
+          vwap_std = (
+              compute_session_vwap_std(session_bars, vwap)
+              if self.config.strategy.require_vwap_volatility_cap
+              else None
+          )
           cum_vol = sum(b.volume for b in session_bars)
           hist_vols = (historical_minute_volumes or {}).get(sym, [max(1, cum_vol // 2)])
           rvol = compute_time_of_day_rvol(cum_vol, hist_vols)
@@ -291,6 +297,7 @@ class EventDrivenBacktester:
               prev_daily_close=prev_close,
               nifty_strongly_bearish=False,
               htf_ema=htf_ema,
+              vwap_std=vwap_std,
           )
           if sig_eval.triggered and sig_eval.signal_id:
             candidate_breakouts += 1

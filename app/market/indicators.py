@@ -190,3 +190,40 @@ def check_two_day_high_breakout(
   if curr > pdh:
     return True, f"TWO_DAY_HIGH_CONFIRMED: Price {curr} > Prev High {pdh}"
   return False, f"TWO_DAY_HIGH_REJECTED: Price {curr} <= Prev High {pdh}"
+
+
+def compute_session_vwap_std(session_bars: list[CandleBar], vwap: Decimal) -> Decimal:
+  """Calculates volume-weighted standard deviation around the session VWAP."""
+  if not session_bars:
+    return Decimal("0.00")
+  cum_vol = sum(b.volume for b in session_bars)
+  if cum_vol <= 0:
+    return Decimal("0.00")
+  three = Decimal("3")
+  cum_sq_diff = Decimal("0")
+  v = to_decimal(vwap)
+  for b in session_bars:
+    tp = (b.high + b.low + b.close) / three
+    diff = tp - v
+    cum_sq_diff += Decimal(b.volume) * (diff * diff)
+  variance = cum_sq_diff / Decimal(cum_vol)
+  return round_price(variance.sqrt()) if variance > Decimal("0") else Decimal("0.00")
+
+
+def check_vwap_breakout_exhaustion(
+    current_price: Decimal,
+    vwap: Decimal,
+    vwap_std: Decimal | None,
+    max_multiplier: Decimal = Decimal("2.5"),
+) -> tuple[bool, str]:
+  """Rejects breakouts that occur when price is statistically over-extended above session VWAP."""
+  if vwap_std is None or vwap_std <= Decimal("0"):
+    return True, "VWAP_STD_UNAVAILABLE_PERMISSIVE"
+  curr = to_decimal(current_price)
+  v = to_decimal(vwap)
+  std = to_decimal(vwap_std)
+  mult = to_decimal(max_multiplier)
+  cap = round_price(v + (mult * std))
+  if curr > cap:
+    return False, f"EXHAUSTION_BAND_EXCEEDED: Price {curr} > Upper {mult}σ Band {cap} (VWAP={v}, Std={std})"
+  return True, f"VWAP_BAND_OK: Price {curr} <= Upper {mult}σ Band {cap}"

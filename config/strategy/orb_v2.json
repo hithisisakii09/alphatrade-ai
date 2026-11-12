@@ -17,6 +17,8 @@
   "macro_timeframe_minutes": 60,
   "macro_ema_period": 50,
   "require_two_day_high_breakout": false,
+  "require_vwap_volatility_cap": false,
+  "max_vwap_std_multiplier": "2.5",
   "risk_profiles": {
     "STANDARD_RESEARCH_100K": {
       "reference_capital": "100000.00",

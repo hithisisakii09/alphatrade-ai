@@ -46,6 +46,8 @@ class StrategyConfigModel(BaseModel):
   macro_timeframe_minutes: int = Field(default=60)
   macro_ema_period: int = Field(default=50)
   require_two_day_high_breakout: bool = Field(default=False)
+  require_vwap_volatility_cap: bool = Field(default=False)
+  max_vwap_std_multiplier: Decimal = Field(default=Decimal("2.5"))
   risk_profiles: dict[str, RiskProfileConfig]
 
 

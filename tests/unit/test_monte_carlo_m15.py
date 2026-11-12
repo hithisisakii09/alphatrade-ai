@@ -68,3 +68,4 @@ def test_monte_carlo_api_endpoint():
   assert "ruin_probability_pct" in data
   assert "median_max_drawdown_pct" in data
   assert "sample_paths" in data
+

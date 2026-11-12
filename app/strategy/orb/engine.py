@@ -11,6 +11,7 @@ from app.market.indicators import (
     OpeningRangeState,
     check_macro_trend_alignment,
     check_two_day_high_breakout,
+    check_vwap_breakout_exhaustion,
 )
 
 
@@ -58,6 +59,7 @@ class ORBStrategyEngine:
       nifty_strongly_bearish: bool = False,
       htf_ema: Decimal | None = None,
       prev_day_high: Decimal | None = None,
+      vwap_std: Decimal | None = None,
   ) -> ORBSignalEvaluation:
     dt_ist = to_ist(bar_5m.timestamp_utc)
     session_date = dt_ist.date().isoformat()
@@ -255,6 +257,30 @@ class ORBStrategyEngine:
             rvol=rvol,
             rejection_reason="TWO_DAY_HIGH_NOT_BROKEN",
             explanation=high_msg,
+        )
+
+    # 12. VWAP breakout exhaustion filter
+    if self.config.require_vwap_volatility_cap:
+      ok, vwap_msg = check_vwap_breakout_exhaustion(
+          current_price=bar_5m.close,
+          vwap=vwap,
+          vwap_std=vwap_std,
+          max_multiplier=self.config.max_vwap_std_multiplier,
+      )
+      if not ok:
+        return ORBSignalEvaluation(
+            symbol=sym,
+            session_date=session_date,
+            timestamp_utc=bar_5m.timestamp_utc,
+            triggered=False,
+            signal_id=None,
+            signal_price=bar_5m.close,
+            orb_high=orb_state.orb_high,
+            orb_low=orb_state.orb_low,
+            vwap=vwap,
+            rvol=rvol,
+            rejection_reason="VWAP_EXHAUSTION_BAND_EXCEEDED",
+            explanation=vwap_msg,
         )
 
     sig_id = f"SIG_{sym}_{session_date}_{dt_ist.strftime('%H%M')}"

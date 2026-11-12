@@ -34,6 +34,7 @@ from app.market.indicators import (
     compute_higher_timeframe_ema,
     compute_opening_range,
     compute_session_vwap,
+    compute_session_vwap_std,
     compute_time_of_day_rvol,
 )
 from app.portfolio.ledger import PortfolioLedger
@@ -627,6 +628,11 @@ class ScheduledDailyRunner:
               continue
             latest_5m = bars_5m[-1]
             vwap = compute_session_vwap(valid_bars)
+            vwap_std = (
+                compute_session_vwap_std(valid_bars, vwap)
+                if self.config.strategy.require_vwap_volatility_cap
+                else None
+            )
             cum_vol = sum(b.volume for b in valid_bars)
             rvol = compute_time_of_day_rvol(cum_vol, [max(1, cum_vol // 2)])
 
@@ -649,6 +655,7 @@ class ScheduledDailyRunner:
                 prev_daily_close=prev_close,
                 nifty_strongly_bearish=False,
                 htf_ema=htf_ema,
+                vwap_std=vwap_std,
             )
 
             if sig_eval.triggered and sig_eval.signal_id:

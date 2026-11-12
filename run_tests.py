@@ -14,6 +14,7 @@ from tests.unit import test_volatility_and_regime as t_vol
 from tests.unit import test_macro_trend_and_m13 as t_m13
 from tests.unit import test_analytics_and_journal_m14 as t_m14
 from tests.unit import test_monte_carlo_m15 as t_m15
+from tests.unit import test_vwap_bands_and_m16 as t_m16
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -92,6 +93,11 @@ def run_all() -> int:
           t_m15.test_monte_carlo_deterministic_seed,
           t_m15.test_monte_carlo_loss_pool_triggers_ruin,
           t_m15.test_monte_carlo_api_endpoint,
+      ]),
+      ("unit/test_vwap_bands_and_m16.py", [
+          t_m16.test_compute_session_vwap_std_calculation,
+          t_m16.test_check_vwap_breakout_exhaustion_filter,
+          t_m16.test_m16_end_to_end_strategy_rejection_of_exhausted_breakout,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
