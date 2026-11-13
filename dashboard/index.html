@@ -735,6 +735,40 @@
         </table>
       </div>
 
+      <!-- M21: Bayesian Hyperparameter Optimizer -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M21 — Adaptive Signal Calibration &amp; Bayesian Hyperparameter Optimizer</h2>
+            <span style="font-size:0.85rem; color:var(--muted);">Coarse grid + GP-UCB Bayesian search over 8-D ORB parameter space — identifies optimal signal configuration</span>
+          </div>
+          <button class="refresh-btn" style="background:var(--teal); color:#fff; border-color:var(--teal);" onclick="refreshHyperparamData(event)">🔭 Run HP Optimizer</button>
+        </div>
+        <div id="hyperparam-summary-banner" style="background:var(--bg); padding:0.6rem 1rem; border-radius:4px; font-size:0.85rem; color:var(--navy); margin-bottom:0.75rem; border-left:4px solid var(--teal);">
+          Click 'Run HP Optimizer' to execute Bayesian hyperparameter search across authentic historical candles...
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Config Label</th>
+              <th>Trades</th>
+              <th>Win Rate</th>
+              <th>PF</th>
+              <th>Net Exp (R) [95% CI]</th>
+              <th>Sharpe</th>
+              <th>Max DD</th>
+              <th>Score</th>
+              <th>H0</th>
+            </tr>
+          </thead>
+          <tbody id="hyperparam-tbody">
+            <tr><td colspan="10" style="text-align:center; color:var(--muted);">Click 'Run HP Optimizer' to find the best parameter configuration...</td></tr>
+          </tbody>
+        </table>
+        <div id="hyperparam-best-params" style="margin-top:0.75rem; padding:0.5rem 1rem; font-size:0.82rem; color:var(--muted); display:none; border-top:1px solid var(--border);"></div>
+      </div>
+
       <div class="section-card">
         <h2>Quantitative Backtest Runs &amp; Out-of-Sample Performance</h2>
         <table>
@@ -1309,6 +1343,61 @@
       } catch (err) {
         console.error('Failed to run factor ablation', err);
         if (banner) banner.textContent = 'Failed to load factor ablation study.';
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshHyperparamData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Optimizing...';
+        btn.disabled = true;
+      }
+      const banner = document.getElementById('hyperparam-summary-banner');
+      if (banner) banner.textContent = 'Running Bayesian hyperparameter optimization across authentic historical candles (this may take 30-60s)...';
+      try {
+        const data = await fetchJson('/research/hyperparameter-optimization?symbols=RELIANCE,SBIN,TCS&bars_limit=300&coarse_evals=20&bayes_iters=6');
+        if (data && data.top_10_configs) {
+          const improvR = Number(data.improvement_vs_baseline_r);
+          if (banner) banner.textContent = `Optimization complete — ${data.total_evaluations} evaluations, ${data.total_candles_evaluated?.toLocaleString()} candles. Best config: ${data.best_params?.opening_range_minutes}m OR, RVOL≥${Number(data.best_params?.min_rvol_threshold).toFixed(2)}×. Improvement vs M9 baseline: ${improvR >= 0 ? '+' : ''}${improvR.toFixed(4)} R.`;
+          const tbody = document.getElementById('hyperparam-tbody');
+          if (tbody) {
+            tbody.innerHTML = data.top_10_configs.map((r, idx) => {
+              const expBadge = `<span style="font-weight:600; color:${Number(r.net_expectancy_r) >= 0 ? 'var(--green)' : 'var(--red)'};">${Number(r.net_expectancy_r) >= 0 ? '+' : ''}${Number(r.net_expectancy_r).toFixed(4)} R <span style="font-size:0.75rem; color:var(--muted);">[${Number(r.expectancy_ci_lower_r).toFixed(3)}, ${Number(r.expectancy_ci_upper_r).toFixed(3)}]</span></span>`;
+              const h0Pill = r.rejection_of_null
+                ? '<span class="pill ok">REJECT ✓</span>'
+                : `<span class="pill warn">p=${Number(r.p_value).toFixed(3)}</span>`;
+              const scoreColor = Number(r.composite_score) >= 0 ? 'var(--green)' : 'var(--red)';
+              return `<tr>
+                <td><strong>#${idx + 1}</strong></td>
+                <td style="font-size:0.75rem; font-family:monospace; color:var(--navy);">${r.label}</td>
+                <td>${r.total_trades}</td>
+                <td>${Number(r.win_rate_pct).toFixed(1)}%</td>
+                <td><strong>${Number(r.profit_factor).toFixed(3)}</strong></td>
+                <td>${expBadge}</td>
+                <td>${Number(r.sharpe_ratio).toFixed(3)}</td>
+                <td>${Number(r.max_drawdown_pct).toFixed(2)}%</td>
+                <td style="font-weight:700; color:${scoreColor};">${Number(r.composite_score) >= 0 ? '+' : ''}${Number(r.composite_score).toFixed(4)}</td>
+                <td>${h0Pill}</td>
+              </tr>`;
+            }).join('');
+          }
+          const bestDiv = document.getElementById('hyperparam-best-params');
+          if (bestDiv && data.best_params) {
+            const bp = data.best_params;
+            bestDiv.style.display = 'block';
+            bestDiv.innerHTML = `<strong>Best Config Parameters:</strong> OR=${bp.opening_range_minutes}m | RVOL≥${Number(bp.min_rvol_threshold).toFixed(2)}× | Stop=${(Number(bp.initial_stop_pct)*100).toFixed(2)}% | Trail Act.=${(Number(bp.trailing_activation_pct)*100).toFixed(2)}% | Trail Drop=${(Number(bp.trailing_drop_pct)*100).toFixed(2)}% | VWAP=${Number(bp.max_vwap_std_multiplier).toFixed(1)}σ | MacroTrend=${bp.require_macro_trend} | HMMRegime=${bp.require_regime_filter}`;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to run hyperparameter optimization', err);
+        if (banner) banner.textContent = 'Failed to load hyperparameter optimization results.';
       } finally {
         if (btn) {
           btn.textContent = orig;

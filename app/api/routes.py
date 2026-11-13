@@ -24,6 +24,7 @@ from app.reporting.analytics import compute_trade_analytics, generate_trade_jour
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
 from app.research.ablation import run_augmented_factor_ablation_from_db
 from app.research.monte_carlo import run_monte_carlo_resampling
+from app.research.optimizer import run_hyperparameter_optimization
 from app.risk.engine import RiskEngine
 from app.risk.var import PortfolioVaREngine
 from app.services.daily_runner import ScheduledDailyRunner
@@ -595,6 +596,30 @@ def get_augmented_study_endpoint(
       db_url=_cfg.database_url,
       symbols=target_syms,
       max_bars_per_symbol=bars_limit,
+  )
+  return res.to_dict()
+
+
+@router.get("/research/hyperparameter-optimization")
+def get_hyperparameter_optimization_endpoint(
+    symbols: str = "RELIANCE,SBIN,TCS",
+    bars_limit: int | None = 300,
+    coarse_evals: int = 20,
+    bayes_iters: int = 6,
+):
+  """
+  M21 — Adaptive Signal Calibration & Bayesian Hyperparameter Optimizer:
+  Runs a 2-stage coarse grid + GP-UCB search over the ORB strategy parameter space.
+  Returns ranked top-10 configurations with composite scores, expectancy CIs,
+  and improvement vs the M9/M20 baselines.
+  """
+  target_syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+  res = run_hyperparameter_optimization(
+      db_url=_cfg.database_url,
+      symbols=target_syms,
+      bars_limit=bars_limit,
+      max_coarse_evals=coarse_evals,
+      bayesian_iterations=bayes_iters,
   )
   return res.to_dict()
 

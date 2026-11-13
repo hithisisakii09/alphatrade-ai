@@ -19,6 +19,7 @@ from tests.unit import test_var_and_cvar_m17 as t_m17
 from tests.unit import test_market_impact_m18 as t_m18
 from tests.unit import test_regime_m19 as t_m19
 from tests.unit import test_augmented_study_m20 as t_m20
+from tests.unit import test_hyperparameter_optimizer_m21 as t_m21
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -134,6 +135,16 @@ def run_all() -> int:
           t_m20.test_factor_ablation_engine_execution,
           t_m20.test_ablation_marginal_deltas,
           t_m20.test_api_augmented_study_endpoint,
+      ]),
+      ("unit/test_hyperparameter_optimizer_m21.py", [
+          t_m21.test_hyperparam_point_construction_and_label,
+          t_m21.test_random_grid_sampler_constraints,
+          t_m21.test_composite_score_function,
+          t_m21.test_config_builder_applies_params,
+          t_m21.test_gp_surrogate_predictions,
+          t_m21.test_point_to_vector_normalisation,
+          t_m21.test_optimizer_pipeline_tiny_dataset,
+          t_m21.test_api_hyperparameter_optimization_endpoint,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
