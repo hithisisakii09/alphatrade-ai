@@ -29,6 +29,8 @@ class RiskProfileConfig(BaseModel):
   max_portfolio_var_95_pct: Decimal = Field(default=Decimal("0.025"))
   require_participation_rate_cap: bool = Field(default=False)
   max_participation_rate_pct: Decimal = Field(default=Decimal("0.05"))
+  require_regime_filter: bool = Field(default=False)
+  allowed_regimes: list[str] = Field(default_factory=lambda: ["BULL", "NEUTRAL"])
 
 
 class StrategyConfigModel(BaseModel):
@@ -52,6 +54,9 @@ class StrategyConfigModel(BaseModel):
   require_two_day_high_breakout: bool = Field(default=False)
   require_vwap_volatility_cap: bool = Field(default=False)
   max_vwap_std_multiplier: Decimal = Field(default=Decimal("2.5"))
+  require_regime_filter: bool = Field(default=False)
+  regime_min_bars: int = Field(default=30)
+  allowed_regimes: list[str] = Field(default_factory=lambda: ["BULL", "NEUTRAL"])
   risk_profiles: dict[str, RiskProfileConfig]
 
 

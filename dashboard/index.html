@@ -242,6 +242,52 @@
         </div>
       </div>
 
+      <!-- M19: Hidden Markov Model Volatility Regime Monitor -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2>Milestone M19 — HMM Volatility Regime Monitor</h2>
+          <div>
+            <select id="regime-symbol-select" onchange="refreshRegimeData()" style="padding:0.3rem 0.6rem; border-radius:4px; border:1px solid var(--border); font-size:0.85rem; background:white;">
+              <option value="RELIANCE" selected>RELIANCE</option>
+              <option value="SBIN">SBIN</option>
+              <option value="TCS">TCS</option>
+              <option value="HDFCBANK">HDFCBANK</option>
+              <option value="INFY">INFY</option>
+            </select>
+            <button onclick="refreshRegimeData(event)" class="tab-btn active" style="padding:0.3rem 0.8rem; font-size:0.8rem; margin-left:0.5rem;">🔄 Refresh Regime</button>
+          </div>
+        </div>
+        <p style="color:var(--muted); font-size:0.85rem; margin-bottom:1rem;">
+          3-State Gaussian Hidden Markov Model (Baum-Welch EM + Viterbi decoding) on 1-minute intraday returns &amp; normalized range. Enforces Check 13 <code>ADVERSE_REGIME</code> filter.
+        </p>
+        <div class="kpi-grid">
+          <div class="card">
+            <h3>Current Regime</h3>
+            <div id="regime-current-state" class="val" style="color:var(--navy); font-size:1.4rem;">NEUTRAL</div>
+            <div id="regime-confidence-sub" class="sub">Confidence: 0.0%</div>
+          </div>
+          <div class="card">
+            <h3>Bull Probability</h3>
+            <div id="regime-prob-bull" class="val" style="color:var(--green); font-size:1.4rem;">0.0%</div>
+            <div class="sub">Low vol, positive drift</div>
+          </div>
+          <div class="card">
+            <h3>Neutral Probability</h3>
+            <div id="regime-prob-neutral" class="val" style="color:var(--navy); font-size:1.4rem;">0.0%</div>
+            <div class="sub">Normal drift, moderate vol</div>
+          </div>
+          <div class="card">
+            <h3>Bear Probability</h3>
+            <div id="regime-prob-bear" class="val" style="color:var(--red); font-size:1.4rem;">0.0%</div>
+            <div class="sub">High vol, negative drift</div>
+          </div>
+        </div>
+        <div id="regime-dist-container" style="margin-top:0.75rem; font-size:0.85rem; color:var(--muted);">
+          <span>Historical Distribution: </span>
+          <span id="regime-dist-text">Calculating...</span>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -998,6 +1044,9 @@
       // 12. Execution Quality & Market Impact Analytics
       refreshImpactData();
 
+      // 13. HMM Volatility Regime Monitor
+      refreshRegimeData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1103,6 +1152,43 @@
         }
       } catch (err) {
         console.error('Failed to load Execution Impact data', err);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshRegimeData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Fitting HMM...';
+        btn.disabled = true;
+      }
+      const select = document.getElementById('regime-symbol-select');
+      const symbol = select ? select.value : 'RELIANCE';
+      try {
+        const data = await fetchJson(`/market/regime?symbol=${symbol}&lookback_bars=60`);
+        if (data) {
+          const stateEl = document.getElementById('regime-current-state');
+          if (stateEl) {
+            stateEl.textContent = data.regime;
+            stateEl.style.color = data.regime === 'BULL' ? 'var(--green)' : (data.regime === 'BEAR' ? 'var(--red)' : 'var(--navy)');
+          }
+          setElText('regime-confidence-sub', `Confidence: ${(Number(data.confidence) * 100).toFixed(1)}% (${data.n_bars_used} bars)`);
+          setElText('regime-prob-bull', `${(Number(data.bull_prob) * 100).toFixed(1)}%`);
+          setElText('regime-prob-neutral', `${(Number(data.neutral_prob) * 100).toFixed(1)}%`);
+          setElText('regime-prob-bear', `${(Number(data.bear_prob) * 100).toFixed(1)}%`);
+          if (data.regime_distribution) {
+            const d = data.regime_distribution;
+            setElText('regime-dist-text', `BULL: ${(Number(d.BULL || 0) * 100).toFixed(1)}% | NEUTRAL: ${(Number(d.NEUTRAL || 0) * 100).toFixed(1)}% | BEAR: ${(Number(d.BEAR || 0) * 100).toFixed(1)}%`);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch regime data', e);
       } finally {
         if (btn) {
           btn.textContent = orig;

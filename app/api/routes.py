@@ -18,6 +18,7 @@ from app.core.database import (
 )
 from app.execution.costs import NSECostEngine
 from app.execution.impact import ExecutionAnalyticsEngine
+from app.market.regime import VolatilityRegimeClassifier
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
@@ -520,6 +521,62 @@ def get_execution_impact_endpoint(
       },
       "by_symbol": summary.by_symbol,
       "simulation": sim_breakdown,
+  }
+
+
+@router.get("/market/regime")
+def get_market_regime(symbol: str = "RELIANCE", lookback_bars: int = 60):
+  """
+  M19 — HMM Volatility Regime: classify current market regime from recent 1-min candle bars.
+  Returns BULL / NEUTRAL / BEAR with posterior probabilities and confidence.
+  """
+  with _SessionLocal() as session:
+    cur = session.conn.cursor()
+    cur.execute(
+        "SELECT open, high, low, close, volume FROM market_candles "
+        "WHERE symbol = ? AND interval_minutes = 1 "
+        "ORDER BY timestamp_utc DESC LIMIT ?",
+        (symbol, lookback_bars),
+    )
+    rows = cur.fetchall()
+
+  if not rows:
+    return {
+        "symbol": symbol,
+        "regime": "NEUTRAL",
+        "confidence": 0.333,
+        "bull_prob": 0.333,
+        "neutral_prob": 0.334,
+        "bear_prob": 0.333,
+        "n_bars_used": 0,
+        "log_likelihood": None,
+        "regime_distribution": {"BULL": 0.0, "NEUTRAL": 1.0, "BEAR": 0.0},
+        "message": "Insufficient data — defaulting to NEUTRAL.",
+    }
+
+  # Rows are newest-first → reverse to chronological
+  rows = list(reversed(rows))
+  closes = [float(r[3]) for r in rows]
+  highs  = [float(r[1]) for r in rows]
+  lows   = [float(r[2]) for r in rows]
+
+  clf = VolatilityRegimeClassifier(min_bars=20)
+  clf.fit(closes, highs, lows)
+  state = clf.predict_current()
+  dist  = clf.regime_distribution()
+
+  return {
+      "symbol": symbol,
+      "lookback_bars": len(rows),
+      "regime": state.regime.value,
+      "confidence": round(state.confidence, 4),
+      "bull_prob": round(state.bull_prob, 4),
+      "neutral_prob": round(state.neutral_prob, 4),
+      "bear_prob": round(state.bear_prob, 4),
+      "n_bars_used": state.n_bars_used,
+      "log_likelihood": round(state.log_likelihood, 4) if state.log_likelihood != float("-inf") else None,
+      "regime_distribution": {k: round(v, 4) for k, v in dist.items()},
+      "hmm_trained": clf.is_trained,
   }
 
 

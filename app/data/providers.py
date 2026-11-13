@@ -214,9 +214,12 @@ class AngelSmartAPIDataProvider:
 
     self._rate_limiter.wait()
     client = self._get_client()
-    resp = client.post(url, json=payload, headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
+    try:
+      resp = client.post(url, json=payload, headers=headers)
+      resp.raise_for_status()
+      data = resp.json()
+    except Exception as e:
+      raise ProviderAuthenticationError(f"Angel One HTTP login failed: {e}") from e
     if not data.get("status"):
       raise ProviderAuthenticationError(
           f"Angel One login failed: {data.get('message', data.get('errorcode', 'Unknown error'))}"

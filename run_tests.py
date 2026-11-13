@@ -17,6 +17,7 @@ from tests.unit import test_monte_carlo_m15 as t_m15
 from tests.unit import test_vwap_bands_and_m16 as t_m16
 from tests.unit import test_var_and_cvar_m17 as t_m17
 from tests.unit import test_market_impact_m18 as t_m18
+from tests.unit import test_regime_m19 as t_m19
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -116,6 +117,14 @@ def run_all() -> int:
           t_m18.test_risk_engine_participation_rate_limit_gate,
           t_m18.test_execution_analytics_engine_historical_aggregation,
           t_m18.test_api_execution_impact_endpoint,
+      ]),
+      ("unit/test_regime_m19.py", [
+          t_m19.test_bull_regime_detected_on_rising_prices,
+          t_m19.test_bear_regime_detected_on_falling_prices,
+          t_m19.test_insufficient_bars_returns_neutral_fallback,
+          t_m19.test_regime_sequence_length_matches_observations,
+          t_m19.test_orb_engine_rejects_on_adverse_regime,
+          t_m19.test_api_regime_endpoint,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
