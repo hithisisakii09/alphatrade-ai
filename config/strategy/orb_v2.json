@@ -87,6 +87,29 @@
       "max_participation_rate_pct": "0.05",
       "require_regime_filter": false,
       "allowed_regimes": ["BULL", "NEUTRAL"]
+    },
+    "CALIBRATED_RESEARCH_M21": {
+      "reference_capital": "100000.00",
+      "max_risk_per_trade_pct": "0.005",
+      "max_daily_loss_pct": "0.015",
+      "max_capital_deployed_pct": "0.80",
+      "max_single_position_pct": "0.40",
+      "max_open_positions": 2,
+      "exit_mode": "INTRADAY_V2",
+      "initial_stop_pct": "0.0075",
+      "min_stop_pct": "0.0050",
+      "max_stop_pct": "0.0150",
+      "trailing_activation_pct": "0.0300",
+      "trailing_drop_pct": "0.0050",
+      "max_cost_to_risk_ratio": "0.15",
+      "opening_range_minutes": 20,
+      "min_rvol_threshold": "1.75",
+      "require_macro_trend_alignment": true,
+      "require_two_day_high_breakout": true,
+      "require_vwap_volatility_cap": true,
+      "max_vwap_std_multiplier": "3.0",
+      "require_regime_filter": true,
+      "allowed_regimes": ["BULL", "NEUTRAL"]
     }
   }
 }

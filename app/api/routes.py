@@ -7,6 +7,7 @@ from fastapi import APIRouter, Response
 from fastapi.responses import HTMLResponse
 from app.core.clock import NSECalendar, to_ist
 from app.core.config import load_app_config
+from app.core.money import to_decimal
 from app.core.database import (
     BacktestTradeRecord,
     DataQualityEventRecord,
@@ -25,6 +26,7 @@ from app.reporting.reports import generate_daily_report, list_backtest_summaries
 from app.research.ablation import run_augmented_factor_ablation_from_db
 from app.research.monte_carlo import run_monte_carlo_resampling
 from app.research.optimizer import run_hyperparameter_optimization
+from app.surveillance.drift import BaselineDistribution, StatisticalDriftEngine
 from app.risk.engine import RiskEngine
 from app.risk.var import PortfolioVaREngine
 from app.services.daily_runner import ScheduledDailyRunner
@@ -622,6 +624,36 @@ def get_hyperparameter_optimization_endpoint(
       bayesian_iterations=bayes_iters,
   )
   return res.to_dict()
+
+
+@router.get("/surveillance/drift")
+def get_strategy_drift_endpoint(
+    lookback_trades: int = 100,
+    baseline_profile: str = "M21",
+):
+  """
+  M22 — Statistical Drift Surveillance & Concept Shift:
+  Evaluates recent closed trades against the baseline distribution via
+  Two-Sample Kolmogorov-Smirnov (KS) test and CUSUM change-point detection.
+  """
+  baseline = (
+      BaselineDistribution.calibrated_m21_baseline()
+      if baseline_profile.upper() == "M21"
+      else BaselineDistribution.default_m20_baseline()
+  )
+  engine = StatisticalDriftEngine(baseline=baseline)
+
+  with _SessionLocal() as session:
+    cur = session.conn.cursor()
+    cur.execute(
+        "SELECT r_multiple_net FROM backtest_trades ORDER BY id DESC LIMIT ?",
+        (lookback_trades,),
+    )
+    rows = cur.fetchall()
+
+  r_multiples = [to_decimal(str(r[0])) for r in reversed(rows)] if rows else []
+  report = engine.analyze_trades(r_multiples)
+  return report.to_dict()
 
 
 @router.get("/", response_class=HTMLResponse)

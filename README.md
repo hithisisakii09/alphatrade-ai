@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (97/97 tests passing)
+# 2. Run the unified zero-trust test suite (105/105 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -41,7 +41,10 @@ python scripts/run_augmented_walk_forward.py --symbols RELIANCE,SBIN,TCS,INFY,HD
 # 11. Run the M21 Adaptive Signal Calibration & Bayesian Hyperparameter Optimizer
 python scripts/run_hyperparameter_optimizer.py --symbols RELIANCE,SBIN,TCS,INFY,HDFCBANK
 
-# 12. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 12. Run the M22 Continuous Multi-Session Paper Soak & Drift Surveillance
+python scripts/run_multi_session_soak.py --profile CALIBRATED_RESEARCH_M21 --max-sessions 15
+
+# 13. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -91,4 +94,5 @@ curl http://localhost:8000/health
 - **Empirical Walk-Forward Validation (`app/research/walk_forward.py`)**: Evaluated on **348,453 validated historical candles across 48 continuous trading sessions**, producing 137 Out-of-Sample trades qualifying for `ELIGIBLE_FOR_STATISTICAL_EVALUATION` standard.
 - **M20 Factor Ablation Study (`app/research/ablation.py`)**: 5-stage comparative factor ablation study across 86,685 authentic 1-minute bars evaluating Model 0 (Naive ORB) through Model 4 (Full Institutional Stack) with Wilson Score CIs, Student's t hypothesis testing, Sharpe/Sortino ratios, and marginal alpha attribution. Results exposed via `GET /research/augmented-study`. Report in `docs/M20_AUGMENTED_WALK_FORWARD_REPORT.md`.
 - **M21 Bayesian Hyperparameter Optimizer (`app/research/optimizer.py`)**: 2-stage coarse grid and GP-UCB Bayesian optimization across 8-D strategy parameter space (opening range, RVOL, stops, trailing drops, VWAP band multiplier, HTF trend, HMM regime filter) optimizing composite risk-adjusted expectancy. Results exposed via `GET /research/hyperparameter-optimization`. Report in `docs/M21_HYPERPARAMETER_OPTIMIZATION_REPORT.md`.
+- **M22 Statistical Drift Surveillance & Multi-Session Paper Soak (`app/surveillance/drift.py`, `scripts/run_multi_session_soak.py`)**: Real-time statistical drift surveillance engine implementing exact Two-Sample Kolmogorov-Smirnov ($D, p\text{-value}$) distribution comparison and sequential CUSUM change-point degradation detection ($R_t$ tracking) with automatic fail-safe risk kill switch shutdown on `CRITICAL_DRIFT`. Automated multi-session soak harness verifying zero memory leaks via `tracemalloc`, previous-close rollover, and 100% double-entry ledger reconciliation. Results exposed via `GET /surveillance/drift`. Report in `docs/M22_PAPER_SOAK_AND_DRIFT_REPORT.md`.
 - **Verified Indian Statutory Cost Model (`app/execution/costs.py`)**: Models percentage-capped brokerage (`min(₹20, 0.03%)` per [Zerodha Charges](https://zerodha.com/charges/)), `0.025%` sell-side STT, `0.003%` buy-side stamp duty, NSE transaction charges, SEBI/IPFT turnover fees, and `18%` GST.

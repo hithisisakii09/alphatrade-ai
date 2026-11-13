@@ -31,6 +31,12 @@ class RiskProfileConfig(BaseModel):
   max_participation_rate_pct: Decimal = Field(default=Decimal("0.05"))
   require_regime_filter: bool = Field(default=False)
   allowed_regimes: list[str] = Field(default_factory=lambda: ["BULL", "NEUTRAL"])
+  opening_range_minutes: int | None = Field(default=None)
+  min_rvol_threshold: Decimal | None = Field(default=None)
+  require_macro_trend_alignment: bool | None = Field(default=None)
+  require_two_day_high_breakout: bool | None = Field(default=None)
+  require_vwap_volatility_cap: bool | None = Field(default=None)
+  max_vwap_std_multiplier: Decimal | None = Field(default=None)
 
 
 class StrategyConfigModel(BaseModel):
@@ -119,10 +125,25 @@ def load_app_config(
   with open(os.path.join(base_dir, "config/costs/nse_intraday_costs.json"), "r") as f:
     cost_raw = json.load(f)
 
+  active_profile = risk_profile_name or os.environ.get("ALPHATRADE_CAPITAL_PROFILE", "STANDARD_RESEARCH_100K")
+  if active_profile in strat_raw.get("risk_profiles", {}):
+    prof_data = strat_raw["risk_profiles"][active_profile]
+    for k in (
+        "opening_range_minutes",
+        "min_rvol_threshold",
+        "require_macro_trend_alignment",
+        "require_two_day_high_breakout",
+        "require_vwap_volatility_cap",
+        "max_vwap_std_multiplier",
+        "require_regime_filter",
+    ):
+      if k in prof_data and prof_data[k] is not None:
+        strat_raw[k] = prof_data[k]
+
   return AppConfig(
       execution_mode=mode,
       database_url=database_url or os.environ.get("ALPHATRADE_DATABASE_URL", "sqlite:///./alphatrade_v2.db"),
-      active_risk_profile=risk_profile_name or os.environ.get("ALPHATRADE_CAPITAL_PROFILE", "STANDARD_RESEARCH_100K"),
+      active_risk_profile=active_profile,
       active_cost_profile=cost_profile_name or "PERCENTAGE_CAPPED_DEFAULT",
       data_provider=os.environ.get("ALPHATRADE_DATA_PROVIDER", "FYERS_V3"),
       strategy=StrategyConfigModel(**strat_raw),

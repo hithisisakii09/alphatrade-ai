@@ -769,6 +769,42 @@
         <div id="hyperparam-best-params" style="margin-top:0.75rem; padding:0.5rem 1rem; font-size:0.82rem; color:var(--muted); display:none; border-top:1px solid var(--border);"></div>
       </div>
 
+      <!-- M22: Real-Time Strategy Drift Surveillance Monitor -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M22 — Real-Time Statistical Drift &amp; Strategy Surveillance Monitor</h2>
+            <span style="font-size:0.85rem; color:var(--muted);">Two-Sample Kolmogorov-Smirnov (KS) test &amp; CUSUM change-point tracking against calibrated baseline</span>
+          </div>
+          <button class="refresh-btn" style="background:var(--navy); color:#fff; border-color:var(--navy);" onclick="refreshDriftData(event)">📡 Refresh Drift Telemetry</button>
+        </div>
+        <div class="kpi-grid">
+          <div class="card" style="background:var(--bg);">
+            <h3>Drift Health Score</h3>
+            <div id="drift-health-score" class="val" style="color:var(--green);">--%</div>
+            <div class="sub">Alert Status: <span id="drift-status-pill" class="pill ok">STANDBY</span></div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>Two-Sample KS Test</h3>
+            <div id="drift-ks-d" class="val" style="color:var(--navy);">D = --</div>
+            <div class="sub">p-value: <span id="drift-ks-p">--</span> (<span id="drift-ks-sig">--</span>)</div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>CUSUM Degradation (C+)</h3>
+            <div id="drift-cusum-val" class="val" style="color:var(--teal);">--</div>
+            <div class="sub">Threshold: <span id="drift-cusum-thresh">2.50</span> (<span id="drift-cusum-alert">Normal</span>)</div>
+          </div>
+          <div class="card" style="background:var(--bg);">
+            <h3>Exp / Win Rate Drift</h3>
+            <div id="drift-exp-comp" class="val" style="color:var(--navy);">--</div>
+            <div class="sub">Monitored: <span id="drift-trades-count">-- trades</span></div>
+          </div>
+        </div>
+        <div id="drift-recs-box" style="margin-top:0.75rem; padding:0.6rem 1rem; border-radius:4px; font-size:0.83rem; background:var(--bg); border-left:4px solid var(--teal);">
+          Click 'Refresh Drift Telemetry' to assess statistical drift and change-points against calibrated baseline...
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Quantitative Backtest Runs &amp; Out-of-Sample Performance</h2>
         <table>
@@ -1115,6 +1151,9 @@
       // 13. HMM Volatility Regime Monitor
       refreshRegimeData();
 
+      // 14. Strategy Drift Surveillance Monitor
+      refreshDriftData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1398,6 +1437,53 @@
       } catch (err) {
         console.error('Failed to run hyperparameter optimization', err);
         if (banner) banner.textContent = 'Failed to load hyperparameter optimization results.';
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshDriftData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Checking Drift...';
+        btn.disabled = true;
+      }
+      try {
+        const data = await fetchJson('/surveillance/drift');
+        if (data) {
+          const score = Number(data.drift_health_score_pct);
+          setElText('drift-health-score', `${score.toFixed(1)}%`);
+          const pill = document.getElementById('drift-status-pill');
+          if (pill) {
+            pill.textContent = data.alert_status;
+            pill.className = data.alert_status === 'NORMAL' ? 'pill ok' : (data.alert_status === 'WATCH' ? 'pill warn' : 'pill err');
+          }
+          if (data.ks_test) {
+            setElText('drift-ks-d', `D = ${Number(data.ks_test.statistic_d).toFixed(3)}`);
+            setElText('drift-ks-p', `${Number(data.ks_test.p_value).toFixed(3)}`);
+            setElText('drift-ks-sig', data.ks_test.drift_detected ? 'Shift Detected' : 'No Shift');
+          }
+          if (data.cusum) {
+            setElText('drift-cusum-val', `${Number(data.cusum.cusum_value).toFixed(2)}`);
+            setElText('drift-cusum-alert', data.cusum.is_change_detected ? 'DEGRADATION' : 'Nominal');
+          }
+          const deltaR = Number(data.delta_mean_r);
+          setElText('drift-exp-comp', `${deltaR >= 0 ? '+' : ''}${deltaR.toFixed(3)} R Δ`);
+          setElText('drift-trades-count', `${data.forward_trades_count} trades (vs ${data.baseline_name})`);
+
+          const recsBox = document.getElementById('drift-recs-box');
+          if (recsBox && data.recommendations) {
+            recsBox.innerHTML = `<strong>Status: ${data.alert_status}</strong><br>` + data.recommendations.map(r => `• ${r}`).join('<br>');
+            recsBox.style.borderLeftColor = data.alert_status === 'NORMAL' ? 'var(--teal)' : (data.alert_status === 'WATCH' ? 'var(--amber)' : 'var(--red)');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch drift telemetry', err);
       } finally {
         if (btn) {
           btn.textContent = orig;

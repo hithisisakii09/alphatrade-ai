@@ -20,6 +20,7 @@ from tests.unit import test_market_impact_m18 as t_m18
 from tests.unit import test_regime_m19 as t_m19
 from tests.unit import test_augmented_study_m20 as t_m20
 from tests.unit import test_hyperparameter_optimizer_m21 as t_m21
+from tests.unit import test_drift_surveillance_m22 as t_m22
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -145,6 +146,16 @@ def run_all() -> int:
           t_m21.test_point_to_vector_normalisation,
           t_m21.test_optimizer_pipeline_tiny_dataset,
           t_m21.test_api_hyperparameter_optimization_endpoint,
+      ]),
+      ("unit/test_drift_surveillance_m22.py", [
+          t_m22.test_two_sample_ks_identical_distributions,
+          t_m22.test_two_sample_ks_shifted_distributions,
+          t_m22.test_cusum_detector_stable_sequence,
+          t_m22.test_cusum_detector_downward_drift_triggers_change_point,
+          t_m22.test_drift_health_score_and_status_transitions,
+          t_m22.test_fail_safe_guard_trips_risk_engine_kill_switch,
+          t_m22.test_calibrated_research_profile_configuration,
+          t_m22.test_api_drift_surveillance_endpoint,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
