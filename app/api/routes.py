@@ -22,6 +22,7 @@ from app.market.regime import VolatilityRegimeClassifier
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
+from app.research.ablation import run_augmented_factor_ablation_from_db
 from app.research.monte_carlo import run_monte_carlo_resampling
 from app.risk.engine import RiskEngine
 from app.risk.var import PortfolioVaREngine
@@ -578,6 +579,24 @@ def get_market_regime(symbol: str = "RELIANCE", lookback_bars: int = 60):
       "regime_distribution": {k: round(v, 4) for k, v in dist.items()},
       "hmm_trained": clf.is_trained,
   }
+
+
+@router.get("/research/augmented-study")
+def get_augmented_study_endpoint(
+    symbols: str = "RELIANCE,SBIN,TCS",
+    bars_limit: int | None = 500,
+):
+  """
+  M20 — Augmented Multi-Month Walk-Forward & Factor Ablation Study:
+  Evaluates 5-tier factor hierarchy across authentic historical candle data.
+  """
+  target_syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+  res = run_augmented_factor_ablation_from_db(
+      db_url=_cfg.database_url,
+      symbols=target_syms,
+      max_bars_per_symbol=bars_limit,
+  )
+  return res.to_dict()
 
 
 @router.get("/", response_class=HTMLResponse)

@@ -23,6 +23,7 @@ from app.market.indicators import (
     compute_time_of_day_rvol,
 )
 from app.portfolio.ledger import PortfolioLedger
+from app.market.regime import VolatilityRegimeClassifier
 from app.risk.engine import RiskEngine
 from app.strategy.orb.engine import ORBStrategyEngine
 
@@ -288,6 +289,28 @@ class EventDrivenBacktester:
               else None
           )
 
+          regime_state = None
+          is_candidate_breakout = (
+              orb_state is not None
+              and orb_state.is_complete
+              and latest_5m.close > orb_state.orb_high
+          )
+          if (
+              is_candidate_breakout
+              and getattr(self.config.strategy, "require_regime_filter", False)
+              and len(session_bars) >= getattr(self.config.strategy, "regime_min_bars", 20)
+          ):
+            clf = VolatilityRegimeClassifier(
+                min_bars=getattr(self.config.strategy, "regime_min_bars", 20),
+                max_iter=20,
+            )
+            clf.fit(
+                closes=[float(b.close) for b in session_bars],
+                highs=[float(b.high) for b in session_bars],
+                lows=[float(b.low) for b in session_bars],
+            )
+            regime_state = clf.predict_current()
+
           sig_eval = self.strategy_engine.evaluate_5m_bar(
               bar_5m=latest_5m,
               orb_state=orb_state,
@@ -298,6 +321,7 @@ class EventDrivenBacktester:
               nifty_strongly_bearish=False,
               htf_ema=htf_ema,
               vwap_std=vwap_std,
+              regime_state=regime_state,
           )
           if sig_eval.triggered and sig_eval.signal_id:
             candidate_breakouts += 1

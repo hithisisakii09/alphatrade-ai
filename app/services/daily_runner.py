@@ -38,6 +38,7 @@ from app.market.indicators import (
     compute_time_of_day_rvol,
 )
 from app.portfolio.ledger import PortfolioLedger
+from app.market.regime import VolatilityRegimeClassifier
 from app.reporting.reports import generate_daily_report
 from app.risk.engine import RiskEngine
 from app.risk.var import PortfolioVaREngine
@@ -649,6 +650,22 @@ class ScheduledDailyRunner:
                 else None
             )
 
+            regime_state = None
+            if (
+                getattr(self.config.strategy, "require_regime_filter", False)
+                and len(valid_bars) >= getattr(self.config.strategy, "regime_min_bars", 20)
+            ):
+              clf = VolatilityRegimeClassifier(
+                  min_bars=getattr(self.config.strategy, "regime_min_bars", 20),
+                  max_iter=30,
+              )
+              clf.fit(
+                  closes=[float(b.close) for b in valid_bars],
+                  highs=[float(b.high) for b in valid_bars],
+                  lows=[float(b.low) for b in valid_bars],
+              )
+              regime_state = clf.predict_current()
+
             sig_eval = self.strategy_engine.evaluate_5m_bar(
                 bar_5m=latest_5m,
                 orb_state=orb_state,
@@ -659,6 +676,7 @@ class ScheduledDailyRunner:
                 nifty_strongly_bearish=False,
                 htf_ema=htf_ema,
                 vwap_std=vwap_std,
+                regime_state=regime_state,
             )
 
             if sig_eval.triggered and sig_eval.signal_id:

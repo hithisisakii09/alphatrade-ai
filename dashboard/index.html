@@ -701,6 +701,40 @@
         </div>
       </div>
 
+      <!-- M20: Factor Ablation Study Scorecard -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M20 — Multi-Month Factor Ablation Study</h2>
+            <span style="font-size:0.85rem; color:var(--muted);">Empirical attribution isolating net alpha across M11–M19 defense modules</span>
+          </div>
+          <button class="refresh-btn" style="background:var(--navy); color:#fff; border-color:var(--navy);" onclick="refreshAblationData(event)">🔬 Run Factor Ablation</button>
+        </div>
+        <div id="ablation-summary-banner" style="background:var(--bg); padding:0.6rem 1rem; border-radius:4px; font-size:0.85rem; color:var(--navy); margin-bottom:0.75rem; border-left:4px solid var(--teal);">
+          Click 'Run Factor Ablation' to evaluate all 5 models across authentic historical sessions...
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Model Tier</th>
+              <th>Description</th>
+              <th>Trades</th>
+              <th>Win Rate (95% CI)</th>
+              <th>Profit Factor</th>
+              <th>Net Exp (R)</th>
+              <th>Sharpe</th>
+              <th>Max DD</th>
+              <th>Δ Win Rate</th>
+              <th>Δ Exp (R)</th>
+              <th>Null (H0)</th>
+            </tr>
+          </thead>
+          <tbody id="ablation-tbody">
+            <tr><td colspan="11" style="text-align:center; color:var(--muted);">Click 'Run Factor Ablation' to evaluate all 5 models...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="section-card">
         <h2>Quantitative Backtest Runs &amp; Out-of-Sample Performance</h2>
         <table>
@@ -1223,6 +1257,58 @@
         alert('Monte Carlo simulation updated successfully across 1,000 bootstrap iterations.');
       } catch (e) {
         alert('Monte Carlo error: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshAblationData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Running Ablation...';
+        btn.disabled = true;
+      }
+      const banner = document.getElementById('ablation-summary-banner');
+      if (banner) banner.textContent = 'Executing 5-model factor ablation backtests across authentic historical candles...';
+      try {
+        const data = await fetchJson('/research/augmented-study?symbols=RELIANCE,SBIN,TCS&bars_limit=500');
+        if (data && data.models) {
+          if (banner) banner.textContent = data.alpha_improvement_summary || 'Factor ablation complete.';
+          const tbody = document.getElementById('ablation-tbody');
+          if (tbody) {
+            tbody.innerHTML = data.models.map(m => {
+              const wrBadge = `<span style="font-weight:600;">${Number(m.win_rate_pct).toFixed(1)}%</span> <span style="font-size:0.75rem; color:var(--muted);">[${Number(m.win_rate_ci_lower_pct).toFixed(1)}%, ${Number(m.win_rate_ci_upper_pct).toFixed(1)}%]</span>`;
+              const expBadge = `<span style="font-weight:600; color:${Number(m.net_expectancy_r) >= 0 ? 'var(--green)' : 'var(--red)'};">${Number(m.net_expectancy_r) >= 0 ? '+' : ''}${Number(m.net_expectancy_r).toFixed(4)} R</span>`;
+              const deltaWrColor = Number(m.delta_win_rate_pct) >= 0 ? 'var(--green)' : 'var(--red)';
+              const deltaExpColor = Number(m.delta_expectancy_r) >= 0 ? 'var(--green)' : 'var(--red)';
+              const h0Pill = m.rejection_of_null 
+                ? '<span class="pill ok">REJECTED (p<0.05)</span>' 
+                : '<span class="pill warn">p=' + Number(m.p_value).toFixed(2) + '</span>';
+
+              return `<tr>
+                <td><strong>${m.model_id}</strong></td>
+                <td style="font-size:0.8rem; color:var(--muted);">${m.description}</td>
+                <td>${m.total_trades}</td>
+                <td>${wrBadge}</td>
+                <td><strong>${Number(m.profit_factor).toFixed(2)}</strong></td>
+                <td>${expBadge}</td>
+                <td>${Number(m.sharpe_ratio).toFixed(2)}</td>
+                <td>${Number(m.max_drawdown_pct).toFixed(2)}%</td>
+                <td style="color:${deltaWrColor}; font-weight:600;">${Number(m.delta_win_rate_pct) >= 0 ? '+' : ''}${Number(m.delta_win_rate_pct).toFixed(2)}%</td>
+                <td style="color:${deltaExpColor}; font-weight:600;">${Number(m.delta_expectancy_r) >= 0 ? '+' : ''}${Number(m.delta_expectancy_r).toFixed(4)} R</td>
+                <td>${h0Pill}</td>
+              </tr>`;
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to run factor ablation', err);
+        if (banner) banner.textContent = 'Failed to load factor ablation study.';
       } finally {
         if (btn) {
           btn.textContent = orig;
