@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (153/153 tests passing)
+# 2. Run the unified zero-trust test suite (161/161 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -62,7 +62,10 @@ python scripts/run_meta_ensemble_backtest.py
 # 18. Run the M28 Automated Disaster Recovery, Hot Snapshots & State Replay CLI
 python scripts/run_disaster_recovery_replay.py
 
-# 19. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 19. Run the M29 Regulatory Compliance & FIX Drop-Copy CLI Harness
+python scripts/run_regulatory_audit_harness.py --events 50
+
+# 20. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -119,4 +122,5 @@ curl http://localhost:8000/health
 - **M26 Real-Time Level-2 WebSocket Streaming, MBP Reconstruction & Sub-Second Breakout (`app/data/streaming.py`, `app/strategy/orb/tick_detector.py`)**: High-performance binary frame parser (`BinaryPacketParser`) decoding Angel One WebSocket 2.0 SnapQuote (Mode 3) frames (123-byte header + 200-byte depth ladders) into pure `Decimal` tick models with zero binary float drift; maintains thread-safe in-memory `LiveOrderBook` objects per constituent; evaluates sub-second tick breakouts against 15m Opening Range High ($Tick.Price > ORH$) immediately upon arrival between 09:30 and 14:30 IST, gated by M25 `MicrostructureLiquidityGate` and M19 HMM regime; replay harness achieves >8,100 ticks/sec with $p_{95} \le 5.0\text{ ms}$ reaction latency. Results exposed via `GET /market/streaming/status` and `GET /market/depth/{symbol}`. Report in `docs/M26_STREAMING_TICK_AND_MBP_REPORT.md`.
 - **M27 Multi-Strategy Meta-Ensemble & Dynamic Regime Allocation (`app/strategy/ensemble/`)**: Modular multi-strategy meta-allocator orchestrating three complementary alpha families: `ORBTrendStrategy` (BULL momentum), `VWAPMeanReversionStrategy` (NEUTRAL 2.0σ VWAP bands), and `PairsSpreadReversionStrategy` (BEAR/vol pairs spread z-score); dynamically computes strategy weights by weighting regime matrices with M19 HMM posterior regime probabilities ($P(\text{BULL}), P(\text{NEUTRAL}), P(\text{BEAR})$); synthesizes consensus conviction orders while systematically resolving cross-strategy directional conflicts. Results exposed via `GET /strategy/ensemble/status` and `GET /strategy/ensemble/signals`. Report in `docs/M27_MULTI_STRATEGY_META_ENSEMBLE_REPORT.md`.
 - **M28 Automated Disaster Recovery, Hot Snapshots & Intraday State Replay (`app/services/recovery.py`)**: Institutional zero-downtime disaster recovery engine featuring `HotStateSnapshotManager` with atomic JSON serialization and SHA-256 cryptographic manifests for active positions, trailing stop high-water marks, algo child orders, and shadow ledger; achieves sub-50ms state rehydration ($p_{95} \le 50.0\text{ ms}$, measured 4.4 ms); automated post-rehydration M24 `RealTimeShadowReconciler` broker parity audit; deterministic trade journal tick replayer (`IntradayTickReplayer`). Results exposed via `GET /system/recovery/status` and `POST /system/recovery/checkpoint`. Report in `docs/M28_DISASTER_RECOVERY_AND_STATE_REPLAY_REPORT.md`.
+- **M29 Regulatory Compliance, SEBI WORM Audit Logging & FIX Drop-Copy Feed (`app/compliance/`)**: SEBI-compliant WORM trade logging architecture featuring `SEBIWORMTradeLogger` with microsecond dual timestamps (UTC + IST), SEBI Annexure attributes, and cryptographic SHA-256 hash chaining; instantaneous full-chain tamper detection; simulated FIX 4.4 Drop-Copy engine (`FIXDropCopyFeed`) publishing standard ExecutionReport (`35=8`) messages with Tag 9 BodyLength and Tag 10 modulo-256 CheckSum. Results exposed via `GET /compliance/audit-trail` and `GET /compliance/drop-copy/status`. Report in `docs/M29_REGULATORY_COMPLIANCE_AND_AUDIT_TRAIL_REPORT.md`.
 - **Verified Indian Statutory Cost Model (`app/execution/costs.py`)**: Models percentage-capped brokerage (`min(₹20, 0.03%)` per [Zerodha Charges](https://zerodha.com/charges/)), `0.025%` sell-side STT, `0.003%` buy-side stamp duty, NSE transaction charges, SEBI/IPFT turnover fees, and `18%` GST.

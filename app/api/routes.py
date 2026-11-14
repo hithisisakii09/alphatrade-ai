@@ -1131,6 +1131,57 @@ def trigger_hot_checkpoint():
   }
 
 
+# ---------------------------------------------------------------------------
+# M29 — Regulatory Compliance, SEBI WORM Audit Logging & FIX Drop-Copy Feed
+# ---------------------------------------------------------------------------
+from app.compliance.worm_logger import AuditEventType, SEBIWORMTradeLogger
+from app.compliance.drop_copy import FIXDropCopyFeed
+
+_worm_logger = SEBIWORMTradeLogger()
+_drop_copy_feed = FIXDropCopyFeed()
+
+# Seed an initial audit event & drop copy message if brand new
+if not _worm_logger._chain:
+  _worm_logger.append_entry(
+      event_type=AuditEventType.ORDER_PLACED,
+      cl_ord_id="CLORD_SYSTEM_INIT_001",
+      symbol="RELIANCE",
+      side="BUY",
+      quantity=100,
+      price="2850.00",
+      broker_order_id="BROKER_SYSTEM_INIT_001",
+      order_type="LIMIT",
+  )
+
+if _drop_copy_feed.get_stats()["total_messages_broadcast"] == 0:
+  _drop_copy_feed.publish_execution_report(
+      cl_ord_id="CLORD_SYSTEM_INIT_001",
+      order_id="BROKER_SYSTEM_INIT_001",
+      exec_type="0",
+      ord_status="0",
+      symbol="RELIANCE",
+      side="BUY",
+      order_qty=100,
+      price="2850.00",
+  )
+
+
+@router.get("/compliance/audit-trail")
+def get_compliance_audit_trail(limit: int = 20):
+  """M29 — Returns SEBI WORM cryptographic hash-chain stats and recent audit blocks."""
+  stats = _worm_logger.get_stats()
+  stats["recent_entries"] = _worm_logger.get_recent_entries(limit=limit)
+  return stats
+
+
+@router.get("/compliance/drop-copy/status")
+def get_compliance_drop_copy_status(limit: int = 20):
+  """M29 — Returns simulated FIX 4.4 Drop-Copy feed status and recent messages."""
+  stats = _drop_copy_feed.get_stats()
+  stats["recent_messages"] = _drop_copy_feed.get_recent_messages(limit=limit)
+  return stats
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 @router.get("/dashboard/", response_class=HTMLResponse)

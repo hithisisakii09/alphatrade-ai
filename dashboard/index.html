@@ -467,6 +467,64 @@
         </div>
       </div>
 
+      <!-- M29: Regulatory Compliance, SEBI WORM Audit Logging & FIX Drop-Copy -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M29 &mdash; Regulatory Compliance &amp; SEBI WORM Audit Trail</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Immutable SHA-256 Hash Chaining &bull; Microsecond Timestamps (UTC+IST) &bull; FIX 4.4 Wire ExecutionReports &bull; Real-Time Tamper Verification
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button class="action-btn" onclick="verifyAuditChain(event)" style="background:var(--teal); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#128737; Verify Hash Chain
+            </button>
+            <button class="action-btn" onclick="refreshComplianceTelemetry(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#128260; Refresh Compliance Telemetry
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Audit Chain Height</h3>
+            <div id="compliance-kpi-height" class="val" style="color:var(--navy);">-- Blocks</div>
+            <div class="sub">WORM Immutable Log</div>
+          </div>
+          <div class="card">
+            <h3>Chain Integrity</h3>
+            <div id="compliance-kpi-status" class="val" style="color:var(--green);">VALID</div>
+            <div class="sub">SHA-256 Hash Chained</div>
+          </div>
+          <div class="card">
+            <h3>FIX Drop-Copy Msgs</h3>
+            <div id="compliance-kpi-fix-msgs" class="val" style="color:var(--teal);">--</div>
+            <div class="sub">ExecutionReport (35=8) Wire</div>
+          </div>
+          <div class="card">
+            <h3>Verification Latency</h3>
+            <div id="compliance-kpi-latency" class="val" style="color:var(--amber);">-- ms</div>
+            <div class="sub">Full-Chain Audit Benchmark</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Recent SEBI WORM Audit Blocks</h3>
+            <div id="compliance-audit-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading WORM audit blocks...</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Recent FIX 4.4 Drop-Copy ExecutionReports</h3>
+            <div id="compliance-dropcopy-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading FIX Drop-Copy feed...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -2472,12 +2530,95 @@
       if (e && e.target) { e.target.textContent = '\u26A1 Trigger Hot Checkpoint'; e.target.disabled = false; }
     }
 
+    // 21. Regulatory Compliance, SEBI WORM Audit & FIX Drop-Copy (M29)
+    async function refreshComplianceTelemetry(e) {
+      if (e && e.target) e.target.textContent = 'Loading...';
+      try {
+        const audit = await fetchJson('/compliance/audit-trail?limit=5');
+        const fix = await fetchJson('/compliance/drop-copy/status?limit=5');
+
+        if (audit) {
+          const heightEl = document.getElementById('compliance-kpi-height');
+          const statusEl = document.getElementById('compliance-kpi-status');
+          const latEl = document.getElementById('compliance-kpi-latency');
+          if (heightEl) heightEl.textContent = audit.chain_height + ' Blocks';
+          if (statusEl) {
+            statusEl.textContent = audit.is_chain_intact ? 'VALID' : 'TAMPERED';
+            statusEl.style.color = audit.is_chain_intact ? 'var(--green)' : 'var(--red)';
+          }
+          if (latEl && audit.verification) {
+            latEl.textContent = audit.verification.verification_latency_ms.toFixed(2) + ' ms';
+          }
+
+          const auditCont = document.getElementById('compliance-audit-container');
+          if (auditCont && audit.recent_entries) {
+            let html = '<table><thead><tr><th>Seq</th><th>Event</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Hash</th></tr></thead><tbody>';
+            for (const r of audit.recent_entries) {
+              html += '<tr><td><code>' + r.sequence_num + '</code></td>' +
+                '<td><strong>' + r.event_type + '</strong></td>' +
+                '<td>' + r.symbol + '</td>' +
+                '<td>' + r.side + '</td>' +
+                '<td>' + r.quantity + '</td>' +
+                '<td>₹' + r.price + '</td>' +
+                '<td><code style="font-size:0.7rem;">' + r.entry_hash.substring(0, 10) + '...</code></td></tr>';
+            }
+            html += '</tbody></table>';
+            auditCont.innerHTML = html;
+          }
+        }
+
+        if (fix) {
+          const fixMsgsEl = document.getElementById('compliance-kpi-fix-msgs');
+          if (fixMsgsEl) fixMsgsEl.textContent = fix.total_messages_broadcast + ' Broadcast';
+
+          const fixCont = document.getElementById('compliance-dropcopy-container');
+          if (fixCont && fix.recent_messages) {
+            let html = '<table><thead><tr><th>Seq</th><th>ClOrdID</th><th>Status</th><th>Symbol</th><th>Qty</th><th>Wire Sample</th></tr></thead><tbody>';
+            for (const m of fix.recent_messages) {
+              html += '<tr><td><code>' + m.msg_seq_num + '</code></td>' +
+                '<td><code style="font-size:0.75rem;">' + m.cl_ord_id + '</code></td>' +
+                '<td><span class="pill ok">' + (m.ord_status === '2' ? 'FILLED' : m.ord_status === '0' ? 'NEW' : 'PARTIAL') + '</span></td>' +
+                '<td>' + m.symbol + '</td>' +
+                '<td>' + m.order_qty + '</td>' +
+                '<td><code style="font-size:0.65rem;" title="' + m.printable_fix + '">' + m.printable_fix.substring(0, 25) + '...</code></td></tr>';
+            }
+            html += '</tbody></table>';
+            fixCont.innerHTML = html;
+          }
+        }
+      } catch(err) {
+        console.error('Compliance telemetry error:', err);
+      }
+      if (e && e.target) e.target.textContent = '\u{1F504} Refresh Compliance Telemetry';
+    }
+
+    async function verifyAuditChain(e) {
+      if (e && e.target) { e.target.textContent = 'Verifying...'; e.target.disabled = true; }
+      try {
+        const audit = await fetchJson('/compliance/audit-trail?limit=1');
+        if (audit && audit.verification) {
+          const v = audit.verification;
+          alert('Cryptographic Hash Chain Audit Complete!\n\nStatus: ' + (v.is_valid ? 'VALID (Tamper-Free)' : 'CORRUPTED') +
+            '\nTotal Chained Records: ' + v.total_records +
+            '\nGenesis Hash: ' + v.genesis_hash +
+            '\nTip Hash: ' + v.tip_hash +
+            '\nVerification Latency: ' + v.verification_latency_ms.toFixed(3) + ' ms');
+        }
+        await refreshComplianceTelemetry(null);
+      } catch(err) {
+        alert('Verification request failed: ' + err);
+      }
+      if (e && e.target) { e.target.textContent = '\u{1F6E1} Verify Hash Chain'; e.target.disabled = false; }
+    }
+
     // Auto-refresh every 5 seconds
     setInterval(refreshAllData, 5000);
     // Initial fetch on load
     refreshAllData();
     // M28: Initial recovery status load
     refreshRecoveryStatus(null);
+    // M29: Initial compliance status load
+    refreshComplianceTelemetry(null);
   </script>
 </body>
 </html>

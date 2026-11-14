@@ -27,6 +27,7 @@ from tests.unit import test_algo_execution_m25 as t_m25
 from tests.unit import test_streaming_m26 as t_m26
 from tests.unit import test_meta_ensemble_m27 as t_m27
 from tests.unit import test_disaster_recovery_m28 as t_m28
+from tests.unit import test_compliance_m29 as t_m29
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -222,6 +223,16 @@ def run_all() -> int:
           t_m28.test_tick_replayer_deterministic_match,
           lambda: _run_with_monkeypatch(t_m28.test_fail_closed_paper_mode_guard),
           t_m28.test_m28_api_endpoints_integration,
+      ]),
+      ("unit/test_compliance_m29.py", [
+          t_m29.test_worm_logger_genesis_and_chaining,
+          t_m29.test_worm_logger_tamper_detection_breaks_chain,
+          t_m29.test_worm_logger_sebi_fields_and_microsecond_precision,
+          t_m29.test_fix_drop_copy_message_formatting_and_checksum,
+          t_m29.test_fix_drop_copy_feed_broadcast_and_buffering,
+          t_m29.test_worm_log_file_persistence_and_reload,
+          lambda: _run_with_monkeypatch(t_m29.test_compliance_fail_closed_paper_mode_guard),
+          t_m29.test_m29_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

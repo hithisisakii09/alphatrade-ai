@@ -20,6 +20,7 @@ htmlcov/
 
 # Local session cache
 .cache/
+.audit/
 
 # Local databases
 *.db
