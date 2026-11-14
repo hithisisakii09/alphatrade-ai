@@ -1,6 +1,6 @@
 """Read-only FastAPI endpoints implementing all 11 specification routes."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_DOWN
 import os
 from fastapi import APIRouter, Response
@@ -25,6 +25,22 @@ from app.execution.gateway import (
 )
 from app.execution.impact import ExecutionAnalyticsEngine
 from app.execution.shadow_reconciler import RealTimeShadowReconciler
+from app.execution.algo_slicer import (
+    AlgoExecutionCoordinator,
+    ParentOrderRequest,
+    TWAPExecutionEngine,
+    DynamicVWAPExecutionEngine,
+)
+from app.execution.tca import (
+    ExecutionSliceFill,
+    compute_implementation_shortfall,
+)
+from app.market.microstructure import (
+    MicrostructureLiquidityGate,
+    OrderBookDepth,
+    OrderBookLevel,
+    analyze_order_book,
+)
 from app.market.regime import VolatilityRegimeClassifier
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
@@ -52,6 +68,41 @@ _mock_angel_gw = MockAngelSmartAPIGateway(name="ANGEL_SMARTAPI_MOCK")
 _sor.register_gateway(_paper_gw)
 _sor.register_gateway(_mock_angel_gw)
 _shadow_reconciler = RealTimeShadowReconciler(gateway=_paper_gw)
+_algo_coordinator = AlgoExecutionCoordinator()
+
+# Pre-populate sample institutional TWAP parent order for live status monitoring
+_now_utc = datetime.now(timezone.utc)
+_sample_twap_parent = ParentOrderRequest(
+    parent_order_id="ALGO_TWAP_RELIANCE_001",
+    symbol="RELIANCE",
+    side="BUY",
+    total_quantity=500,
+    start_time_utc=_now_utc,
+    end_time_utc=_now_utc + timedelta(minutes=15),
+    algo_type="TWAP",
+    num_slices=5,
+    arrival_price=Decimal("2850.00"),
+    decision_price=Decimal("2848.50"),
+)
+_sample_twap_engine = TWAPExecutionEngine(_sample_twap_parent)
+# Simulate 2 executed slices
+_sample_twap_engine.record_slice_fill(
+    slice_id="ALGO_TWAP_RELIANCE_001_S01",
+    filled_quantity=100,
+    average_price=Decimal("2851.20"),
+    broker_order_id="PB_ORD_SAMPLE_01",
+    timestamp_utc=_now_utc,
+    fee_inr=Decimal("4.00"),
+)
+_sample_twap_engine.record_slice_fill(
+    slice_id="ALGO_TWAP_RELIANCE_001_S02",
+    filled_quantity=100,
+    average_price=Decimal("2851.80"),
+    broker_order_id="PB_ORD_SAMPLE_02",
+    timestamp_utc=_now_utc + timedelta(minutes=3),
+    fee_inr=Decimal("4.00"),
+)
+_algo_coordinator.register_algorithm(_sample_twap_engine)
 
 
 @router.get("/health")
@@ -586,6 +637,46 @@ def get_execution_reconciliation_status_endpoint():
       explicit_internal_margin=internal_margin,
   )
   return report.to_dict()
+
+
+@router.get("/execution/algo/status")
+def get_execution_algo_status_endpoint():
+  """
+  M25 — Algorithmic Execution Slicer (TWAP / Dynamic VWAP):
+  Returns registered algorithmic parent orders, slice execution schedules, and completion states.
+  """
+  algos = [algo.to_dict() for algo in _algo_coordinator.active_algorithms.values()]
+  total_active = sum(1 for a in algos if a["status"] == "ACTIVE")
+  total_completed = sum(1 for a in algos if a["status"] == "COMPLETED")
+  return {
+      "active_algorithms_count": total_active,
+      "completed_algorithms_count": total_completed,
+      "algorithms": algos,
+      "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+  }
+
+
+@router.get("/execution/tca/summary")
+def get_execution_tca_summary_endpoint():
+  """
+  M25 — Post-Trade TCA Implementation Shortfall (IS) Attribution:
+  Returns Perold (1988) implementation shortfall breakdowns, market impact, delay, and benchmark shortfalls.
+  """
+  tca_reports = []
+  for algo in _algo_coordinator.active_algorithms.values():
+    if algo.fills:
+      rep = algo.compute_tca(
+          final_market_price=algo.parent.arrival_price,
+          interval_vwap=algo.parent.arrival_price,
+          interval_twap=algo.parent.arrival_price,
+      )
+      tca_reports.append(rep.to_dict())
+
+  return {
+      "total_tca_reports": len(tca_reports),
+      "reports": tca_reports,
+      "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+  }
 
 
 @router.get("/market/regime")

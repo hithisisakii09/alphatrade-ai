@@ -23,6 +23,7 @@ from tests.unit import test_hyperparameter_optimizer_m21 as t_m21
 from tests.unit import test_drift_surveillance_m22 as t_m22
 from tests.unit import test_capital_allocation_m23 as t_m23
 from tests.unit import test_execution_gateway_m24 as t_m24
+from tests.unit import test_algo_execution_m25 as t_m25
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -178,6 +179,16 @@ def run_all() -> int:
           t_m24.test_shadow_reconciler_healthy_state,
           t_m24.test_shadow_reconciler_detects_orphan_position_and_trips_kill_switch,
           t_m24.test_m24_api_endpoints_integration,
+      ]),
+      ("unit/test_algo_execution_m25.py", [
+          t_m25.test_twap_slice_generation_and_exact_quantity_conservation,
+          t_m25.test_dynamic_vwap_slice_generation_and_exact_quantity_conservation,
+          t_m25.test_microstructure_metrics_calculation,
+          t_m25.test_microstructure_liquidity_gate_deferral_on_spread_widening,
+          t_m25.test_tca_implementation_shortfall_decomposition,
+          t_m25.test_algo_slicer_aborts_on_excessive_adverse_slippage,
+          t_m25.test_algo_execution_coordinator_with_broker_gateway,
+          t_m25.test_m25_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

@@ -545,6 +545,59 @@
         </div>
       </div>
 
+      <!-- M25 Algorithmic Order Execution Slicer & TCA Card -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Algorithmic Order Execution Slicer &amp; TCA Shortfall Engine (M25)</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              TWAP &amp; Dynamic VWAP Order Slicing • Microstructure Depth &amp; Spread Gate • Perold Implementation Shortfall (IS) Attribution
+            </p>
+          </div>
+          <button class="action-btn" onclick="refreshAlgoAndTCA(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+            ⚡ Refresh Algo &amp; TCA
+          </button>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Active Slicers</h3>
+            <div id="algo-kpi-active" class="val">1 Active</div>
+            <div id="algo-sub-type" class="sub">TWAP / Dynamic VWAP</div>
+          </div>
+          <div class="card">
+            <h3>Parent Execution Progress</h3>
+            <div id="algo-kpi-progress" class="val">200 / 500</div>
+            <div id="algo-sub-parent-id" class="sub">ALGO_TWAP_RELIANCE_001</div>
+          </div>
+          <div class="card">
+            <h3>Realized Market Impact</h3>
+            <div id="algo-kpi-impact" class="val" style="color:var(--green);">+1.50 bps</div>
+            <div id="algo-sub-impact-inr" class="sub">Market Impact: ₹8.55</div>
+          </div>
+          <div class="card">
+            <h3>TCA Shortfall vs Benchmark</h3>
+            <div id="algo-kpi-shortfall" class="val" style="color:var(--green);">-1.20 bps</div>
+            <div id="algo-sub-benchmark" class="sub">Outperforming Benchmark</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Active Child Order Execution Slices</h3>
+            <div id="algo-slices-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading algorithmic schedule...</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Post-Trade TCA Implementation Shortfall (IS)</h3>
+            <div id="tca-summary-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading TCA attribution...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Executed Paper Orders &amp; Audit Log</h2>
         <table>
@@ -1261,6 +1314,9 @@
       // 16. Multi-Broker Gateway & Shadow Reconciler Monitor
       refreshGatewayAndReconciler();
 
+      // 17. Algorithmic Order Execution Slicer & TCA Monitor (M25)
+      refreshAlgoAndTCA();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1877,6 +1933,89 @@
         }
       } catch (e) {
         console.error('Error refreshing gateway & reconciliation data:', e);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshAlgoAndTCA(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Refreshing...';
+        btn.disabled = true;
+      }
+      try {
+        const [algoRes, tcaRes] = await Promise.all([
+          fetchJson('/execution/algo/status'),
+          fetchJson('/execution/tca/summary')
+        ]);
+
+        if (algoRes && algoRes.algorithms) {
+          setElText('algo-kpi-active', `${algoRes.active_algorithms_count} Active`);
+          const firstAlgo = algoRes.algorithms[0];
+          if (firstAlgo) {
+            setElText('algo-sub-type', `${firstAlgo.algo_type} • ${firstAlgo.symbol} (${firstAlgo.side})`);
+            setElText('algo-kpi-progress', `${firstAlgo.filled_quantity} / ${firstAlgo.total_quantity}`);
+            setElText('algo-sub-parent-id', firstAlgo.parent_order_id);
+
+            const slicesContainer = document.getElementById('algo-slices-container');
+            if (slicesContainer && firstAlgo.slices) {
+              let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Slice ID</th><th>Qty</th><th>Status</th><th>Target Price</th><th>Executed Price</th></tr></thead><tbody>';
+              firstAlgo.slices.forEach(s => {
+                const statusPill = s.status === 'FILLED' 
+                  ? '<span class="pill ok">FILLED</span>'
+                  : (s.status === 'DEFERRED' ? '<span class="pill warning">DEFERRED</span>' : '<span class="pill">PENDING</span>');
+                html += `<tr>
+                  <td><code>${s.slice_id}</code></td>
+                  <td><strong>${s.quantity}</strong></td>
+                  <td>${statusPill}</td>
+                  <td>₹${Number(s.target_price || 0).toFixed(2)}</td>
+                  <td>${Number(s.executed_price) > 0 ? '₹' + Number(s.executed_price).toFixed(2) : '—'}</td>
+                </tr>`;
+              });
+              html += '</tbody></table>';
+              slicesContainer.innerHTML = html;
+            }
+          }
+        }
+
+        if (tcaRes && tcaRes.reports && tcaRes.reports.length > 0) {
+          const rep = tcaRes.reports[0];
+          const impactBps = Number(rep.market_impact_bps);
+          const impactEl = document.getElementById('algo-kpi-impact');
+          if (impactEl) {
+            impactEl.textContent = `${impactBps >= 0 ? '+' : ''}${impactBps.toFixed(2)} bps`;
+            impactEl.style.color = impactBps <= 15 ? 'var(--green)' : 'var(--amber)';
+          }
+          setElText('algo-sub-impact-inr', `Impact: ₹${Number(rep.market_impact_inr).toFixed(2)} • Delay: ₹${Number(rep.delay_cost_inr).toFixed(2)}`);
+
+          const vwapShortfall = Number(rep.vwap_shortfall_bps);
+          const shortfallEl = document.getElementById('algo-kpi-shortfall');
+          if (shortfallEl) {
+            shortfallEl.textContent = `${vwapShortfall <= 0 ? '' : '+'}${vwapShortfall.toFixed(2)} bps`;
+            shortfallEl.style.color = vwapShortfall <= 0 ? 'var(--green)' : 'var(--amber)';
+          }
+          setElText('algo-sub-benchmark', `VWAP: ₹${Number(rep.interval_vwap).toFixed(2)} • Exec: ₹${Number(rep.average_execution_price).toFixed(2)}`);
+
+          const tcaContainer = document.getElementById('tca-summary-container');
+          if (tcaContainer) {
+            let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Component</th><th>INR Amount</th><th>Basis Points (bps)</th></tr></thead><tbody>';
+            html += `<tr><td><strong>Market Impact / Execution Cost</strong></td><td>₹${Number(rep.market_impact_inr).toFixed(2)}</td><td>${Number(rep.market_impact_bps).toFixed(2)} bps</td></tr>`;
+            html += `<tr><td><strong>Delay / Latency Cost</strong></td><td>₹${Number(rep.delay_cost_inr).toFixed(2)}</td><td>${Number(rep.delay_cost_bps).toFixed(2)} bps</td></tr>`;
+            html += `<tr><td><strong>Opportunity Cost (Unfilled)</strong></td><td>₹${Number(rep.opportunity_cost_inr).toFixed(2)}</td><td>${Number(rep.opportunity_cost_bps).toFixed(2)} bps</td></tr>`;
+            html += `<tr><td><strong>Brokerage &amp; Statutory Fees</strong></td><td>₹${Number(rep.total_fees_inr).toFixed(2)}</td><td>${Number(rep.fees_bps).toFixed(2)} bps</td></tr>`;
+            html += `<tr style="font-weight:700; border-top:2px solid var(--border);"><td>Total Implementation Shortfall</td><td>₹${Number(rep.total_shortfall_inr).toFixed(2)}</td><td>${Number(rep.total_shortfall_bps).toFixed(2)} bps</td></tr>`;
+            html += '</tbody></table>';
+            tcaContainer.innerHTML = html;
+          }
+        }
+      } catch (e) {
+        console.error('Error refreshing algorithmic execution and TCA data:', e);
       } finally {
         if (btn) {
           btn.textContent = orig;
