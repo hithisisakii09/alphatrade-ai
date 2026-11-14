@@ -409,6 +409,64 @@
         </div>
       </div>
 
+      <!-- M28: Automated Disaster Recovery, Hot Snapshots & Intraday State Replay -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M28 &mdash; Automated Disaster Recovery &amp; Hot State Replay</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              SHA-256 Atomic Snapshots &bull; Sub-50ms Zero-Downtime Rehydration &bull; M24 Broker Parity &bull; Deterministic Tick Replay Audit
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button class="action-btn" onclick="triggerRecoveryCheckpoint(event)" style="background:var(--red); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#9889; Trigger Hot Checkpoint
+            </button>
+            <button class="action-btn" onclick="refreshRecoveryStatus(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#128260; Refresh Recovery Status
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Snapshot Status</h3>
+            <div id="recovery-kpi-exists" class="val" style="color:var(--navy);">--</div>
+            <div class="sub">SHA-256 Cryptographic Manifest</div>
+          </div>
+          <div class="card">
+            <h3>Snapshot Age</h3>
+            <div id="recovery-kpi-age" class="val" style="color:var(--teal);">-- s</div>
+            <div class="sub">Time since last atomic snapshot</div>
+          </div>
+          <div class="card">
+            <h3>Total Snapshots</h3>
+            <div id="recovery-kpi-count" class="val" style="color:var(--green);">0</div>
+            <div class="sub">Created this session</div>
+          </div>
+          <div class="card">
+            <h3>Broker Parity</h3>
+            <div id="recovery-kpi-parity" class="val" style="color:var(--green);">--</div>
+            <div class="sub">Post-rehydration reconciliation</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Last Rehydration Report</h3>
+            <div id="recovery-rehydration-container">
+              <p style="color:var(--muted); font-size:0.85rem;">Click Refresh Recovery Status to load diagnostics.</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Recovery Telemetry</h3>
+            <div id="recovery-telemetry-container">
+              <p style="color:var(--muted); font-size:0.85rem;">No telemetry loaded yet.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -2367,10 +2425,59 @@
       }
     }
 
+    // 20. Automated Disaster Recovery & Hot State Replay (M28)
+    async function refreshRecoveryStatus(e) {
+      if (e && e.target) e.target.textContent = 'Loading...';
+      try {
+        const d = await fetchJson('/system/recovery/status');
+        if (!d) return;
+        const existsEl = document.getElementById('recovery-kpi-exists');
+        const ageEl = document.getElementById('recovery-kpi-age');
+        const countEl = document.getElementById('recovery-kpi-count');
+        const parityEl = document.getElementById('recovery-kpi-parity');
+        if (existsEl) { existsEl.textContent = d.snapshot_exists ? 'ACTIVE' : 'NONE'; existsEl.style.color = d.snapshot_exists ? 'var(--green)' : 'var(--amber)'; }
+        if (ageEl) ageEl.textContent = d.snapshot_age_seconds.toFixed(1) + ' s';
+        if (countEl) countEl.textContent = d.total_snapshots_created;
+        const reh = d.last_rehydration;
+        if (reh && parityEl) {
+          parityEl.textContent = reh.reconciliation_status;
+          parityEl.style.color = reh.reconciliation_status === 'HEALTHY' ? 'var(--green)' : 'var(--red)';
+          const rehCont = document.getElementById('recovery-rehydration-container');
+          if (rehCont) rehCont.innerHTML = '<table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>' +
+            '<tr><td>Snapshot ID</td><td><code>' + reh.snapshot_id + '</code></td></tr>' +
+            '<tr><td>Positions Restored</td><td>' + reh.positions_restored + '</td></tr>' +
+            '<tr><td>Algos Rearmed</td><td>' + reh.algos_rearmed + '</td></tr>' +
+            '<tr><td>Latency</td><td>' + reh.latency_ms.toFixed(2) + ' ms</td></tr>' +
+            '<tr><td>Status</td><td><span class="pill ' + (reh.reconciliation_status === 'HEALTHY' ? 'ok' : 'warn') + '">' + reh.reconciliation_status + '</span></td></tr>' +
+            '</tbody></table>';
+        }
+        const telCont = document.getElementById('recovery-telemetry-container');
+        if (telCont) telCont.innerHTML = '<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>' +
+          '<tr><td>Path</td><td><code style="font-size:0.75rem;">' + d.latest_snapshot_path + '</code></td></tr>' +
+          '<tr><td>Snapshots Created</td><td>' + d.total_snapshots_created + '</td></tr>' +
+          '<tr><td>Timestamp</td><td>' + d.timestamp_utc + '</td></tr>' +
+          '</tbody></table>';
+      } catch(err) { console.error('Recovery status error:', err); }
+      if (e && e.target) e.target.textContent = '\u{1F504} Refresh Recovery Status';
+    }
+
+    async function triggerRecoveryCheckpoint(e) {
+      if (e && e.target) { e.target.textContent = 'Saving...'; e.target.disabled = true; }
+      try {
+        const r = await fetch('/system/recovery/checkpoint', {method: 'POST'});
+        const d = await r.json();
+        alert('Snapshot Created!\nID: ' + d.snapshot_id + '\nSHA-256: ' + d.sha256 + '\nPositions: ' + d.positions_captured);
+        refreshRecoveryStatus(null);
+      } catch(err) { alert('Checkpoint failed: ' + err); }
+      if (e && e.target) { e.target.textContent = '\u26A1 Trigger Hot Checkpoint'; e.target.disabled = false; }
+    }
+
     // Auto-refresh every 5 seconds
     setInterval(refreshAllData, 5000);
     // Initial fetch on load
     refreshAllData();
+    // M28: Initial recovery status load
+    refreshRecoveryStatus(null);
   </script>
 </body>
 </html>

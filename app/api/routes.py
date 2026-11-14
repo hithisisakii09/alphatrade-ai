@@ -1081,6 +1081,56 @@ def get_margin_stress_endpoint(
   return report.to_dict()
 
 
+# ---------------------------------------------------------------------------
+# M28 — Automated Disaster Recovery, Hot Snapshots & Intraday State Replay
+# ---------------------------------------------------------------------------
+from app.services.recovery import HotStateSnapshotManager
+
+_recovery_mgr = HotStateSnapshotManager()
+
+
+@router.get("/system/recovery/status")
+def get_recovery_status():
+  """M28 — Returns hot snapshot health, age, and last rehydration diagnostics."""
+  return _recovery_mgr.get_telemetry()
+
+
+@router.post("/system/recovery/checkpoint")
+def trigger_hot_checkpoint():
+  """M28 — Creates an atomic hot state snapshot with SHA-256 integrity verification."""
+  from datetime import date
+  with _SessionLocal() as session:
+    prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+    ledger = PortfolioLedger(session, prof.reference_capital)
+    open_pos = session.query(PositionRecord).filter(PositionRecord.status == "OPEN").all()
+    snapshot = _recovery_mgr.create_snapshot(
+        session_date=date.today().isoformat(),
+        open_positions=[
+            {
+                "position_id": p.position_id,
+                "symbol": p.symbol,
+                "quantity": p.quantity,
+                "entry_price": str(p.entry_price),
+                "current_stop_price": str(p.current_stop_price),
+                "highest_price_since_entry": str(p.highest_price_since_entry),
+                "trailing_activated": p.trailing_activated,
+            }
+            for p in open_pos
+        ],
+        ledger_state={
+            "cash_balance_inr": str(ledger.get_cash_balance()),
+            "deployed_exposure_inr": str(ledger.get_deployed_exposure()),
+            "realized_pnl_inr": str(ledger.get_daily_realized_pnl(date.today().isoformat())),
+        },
+    )
+  return {
+      "status": "SNAPSHOT_CREATED",
+      "snapshot_id": snapshot.snapshot_id,
+      "sha256": snapshot.sha256_checksum[:16] + "...",
+      "positions_captured": len(snapshot.open_positions),
+  }
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 @router.get("/dashboard/", response_class=HTMLResponse)

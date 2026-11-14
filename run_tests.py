@@ -26,6 +26,7 @@ from tests.unit import test_execution_gateway_m24 as t_m24
 from tests.unit import test_algo_execution_m25 as t_m25
 from tests.unit import test_streaming_m26 as t_m26
 from tests.unit import test_meta_ensemble_m27 as t_m27
+from tests.unit import test_disaster_recovery_m28 as t_m28
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -211,6 +212,16 @@ def run_all() -> int:
           t_m27.test_meta_ensemble_signal_fusion_and_conflict_resolution,
           t_m27.test_meta_ensemble_fail_closed_paper_mode_guard,
           t_m27.test_m27_api_endpoints_integration,
+      ]),
+      ("unit/test_disaster_recovery_m28.py", [
+          t_m28.test_snapshot_creation_and_sha256_integrity,
+          t_m28.test_snapshot_load_and_verify_positions,
+          t_m28.test_snapshot_integrity_violation_raises_error,
+          t_m28.test_rehydration_with_no_snapshot_returns_healthy,
+          t_m28.test_rehydration_restores_positions_and_algos,
+          t_m28.test_tick_replayer_deterministic_match,
+          lambda: _run_with_monkeypatch(t_m28.test_fail_closed_paper_mode_guard),
+          t_m28.test_m28_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
