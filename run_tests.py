@@ -25,6 +25,7 @@ from tests.unit import test_capital_allocation_m23 as t_m23
 from tests.unit import test_execution_gateway_m24 as t_m24
 from tests.unit import test_algo_execution_m25 as t_m25
 from tests.unit import test_streaming_m26 as t_m26
+from tests.unit import test_meta_ensemble_m27 as t_m27
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -200,6 +201,16 @@ def run_all() -> int:
           t_m26.test_streaming_tick_breakout_detector_rejects_wide_spread,
           t_m26.test_streaming_tick_breakout_detector_rejects_bear_regime,
           t_m26.test_m26_api_endpoints_integration,
+      ]),
+      ("unit/test_meta_ensemble_m27.py", [
+          t_m27.test_base_strategy_interface_and_signal_serialization,
+          t_m27.test_orb_trend_strategy_evaluation,
+          t_m27.test_vwap_mean_reversion_oversold_signal,
+          t_m27.test_pairs_stat_arb_spread_zscore_and_signal,
+          t_m27.test_meta_ensemble_dynamic_weights_computation,
+          t_m27.test_meta_ensemble_signal_fusion_and_conflict_resolution,
+          t_m27.test_meta_ensemble_fail_closed_paper_mode_guard,
+          t_m27.test_m27_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

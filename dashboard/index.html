@@ -348,6 +348,67 @@
         </div>
       </div>
 
+      <!-- M27: Multi-Strategy Meta-Ensemble & Dynamic Regime Allocation Monitor -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M27 — Multi-Strategy Meta-Ensemble &amp; Dynamic Regime Allocation</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Dynamic Alpha Fusion (ORB Trend + VWAP Reversion + Pairs Stat Arb) • HMM Regime Posteriors • Bayesian Conviction
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <select id="ensemble-symbol-select" onchange="refreshEnsembleTelemetry()" style="padding:0.3rem 0.6rem; border-radius:4px; border:1px solid var(--border); font-size:0.85rem; background:white;">
+              <option value="RELIANCE" selected>RELIANCE</option>
+              <option value="TCS">TCS</option>
+              <option value="INFY">INFY</option>
+              <option value="HDFCBANK">HDFCBANK</option>
+            </select>
+            <button class="action-btn" onclick="refreshEnsembleTelemetry(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              ⚡ Refresh Meta-Ensemble
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Trend-Following Weight</h3>
+            <div id="ensemble-kpi-trend" class="val" style="color:var(--navy);">--%</div>
+            <div class="sub">ORB v2 • Bull Dominant</div>
+          </div>
+          <div class="card">
+            <h3>Mean-Reversion Weight</h3>
+            <div id="ensemble-kpi-reversion" class="val" style="color:var(--teal);">--%</div>
+            <div class="sub">2.0σ VWAP Bands • Neutral</div>
+          </div>
+          <div class="card">
+            <h3>Pairs Stat-Arb Weight</h3>
+            <div id="ensemble-kpi-statarb" class="val" style="color:var(--amber);">--%</div>
+            <div class="sub">Spread z-score • Bear / Vol</div>
+          </div>
+          <div class="card">
+            <h3>Synthesized Orders</h3>
+            <div id="ensemble-kpi-orders" class="val" style="color:var(--green);">0 Active</div>
+            <div id="ensemble-sub-conviction" class="sub">Conviction: --</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Active Alpha Strategy Engines</h3>
+            <div id="ensemble-strategies-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading ensemble strategy telemetry...</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Consensus Signal &amp; Conflict Resolution Log</h3>
+            <div id="ensemble-signals-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">No active consensus orders for selected symbol.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -1380,6 +1441,9 @@
       // 18. Real-Time Streaming & MBP Depth Monitor (M26)
       refreshStreamingData();
 
+      // 19. Multi-Strategy Meta-Ensemble Monitor (M27)
+      refreshEnsembleTelemetry();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -2173,6 +2237,91 @@
         }
       } catch (err) {
         console.error(`Error fetching depth for ${sym}:`, err);
+      }
+    }
+
+    async function refreshEnsembleTelemetry(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Evaluating...';
+        btn.disabled = true;
+      }
+      const symSelect = document.getElementById('ensemble-symbol-select');
+      const sym = symSelect ? symSelect.value : 'RELIANCE';
+      try {
+        const [statusData, signalsData] = await Promise.all([
+          fetchJson(`/strategy/ensemble/status?symbol=${sym}`),
+          fetchJson(`/strategy/ensemble/signals?symbol=${sym}`)
+        ]);
+
+        if (statusData && statusData.active_weights) {
+          const w = statusData.active_weights;
+          const trendPct = (Number(w.ORB_TREND_V2 || 0) * 100).toFixed(1);
+          const revPct = (Number(w.VWAP_REVERSION_V1 || 0) * 100).toFixed(1);
+          const arbPct = (Number(w.STAT_ARB_PAIRS_V1 || 0) * 100).toFixed(1);
+
+          setElText('ensemble-kpi-trend', `${trendPct}%`);
+          setElText('ensemble-kpi-reversion', `${revPct}%`);
+          setElText('ensemble-kpi-statarb', `${arbPct}%`);
+
+          const stratContainer = document.getElementById('ensemble-strategies-container');
+          if (stratContainer && statusData.strategies) {
+            let html = '<table style="margin-top:0.5rem; font-size:0.82rem;"><thead><tr><th>Strategy Engine</th><th>Family</th><th>Dynamic Weight</th><th>Regime Alignment</th></tr></thead><tbody>';
+            statusData.strategies.forEach(s => {
+              const wt = (Number(s.current_weight) * 100).toFixed(1);
+              let alignPill = '<span class="pill ok">PRIMARY</span>';
+              if (Number(s.current_weight) < 0.20) alignPill = '<span class="pill warn">DEFENSIVE</span>';
+              html += `<tr>
+                <td><strong>${s.strategy_id}</strong></td>
+                <td><code>${s.strategy_type}</code></td>
+                <td><span class="pill info">${wt}%</span></td>
+                <td>${alignPill}</td>
+              </tr>`;
+            });
+            html += '</tbody></table>';
+            stratContainer.innerHTML = html;
+          }
+        }
+
+        if (signalsData) {
+          const count = signalsData.orders_count || 0;
+          setElText('ensemble-kpi-orders', `${count} Order${count === 1 ? '' : 's'}`);
+
+          const sigContainer = document.getElementById('ensemble-signals-container');
+          if (sigContainer) {
+            if (!signalsData.orders || signalsData.orders.length === 0) {
+              setElText('ensemble-sub-conviction', 'No consensus trigger');
+              sigContainer.innerHTML = `<p style="color:var(--muted); font-size:0.85rem; margin-top:0.5rem;">No consensus triggers generated for ${sym} under prevailing ${signalsData.regime} regime.</p>`;
+            } else {
+              const firstOrd = signalsData.orders[0];
+              setElText('ensemble-sub-conviction', `Conviction: ${(Number(firstOrd.effective_conviction)*100).toFixed(1)}%`);
+              let html = '<table style="margin-top:0.5rem; font-size:0.82rem;"><thead><tr><th>Order ID</th><th>Side</th><th>Ref Price</th><th>Stop Loss</th><th>Target</th><th>Conviction</th><th>Strategies</th></tr></thead><tbody>';
+              signalsData.orders.forEach(o => {
+                const strats = o.participating_strategies.join(', ');
+                html += `<tr>
+                  <td><code>${o.ensemble_order_id}</code></td>
+                  <td><span class="pill ${o.side === 'BUY' ? 'ok' : 'warn'}">${o.side}</span></td>
+                  <td>₹${Number(o.reference_price).toFixed(2)}</td>
+                  <td>₹${Number(o.stop_loss_price).toFixed(2)}</td>
+                  <td>${o.target_price ? '₹' + Number(o.target_price).toFixed(2) : '—'}</td>
+                  <td><strong>${(Number(o.effective_conviction)*100).toFixed(1)}%</strong></td>
+                  <td style="font-size:0.75rem;">${strats}</td>
+                </tr>`;
+              });
+              html += '</tbody></table>';
+              sigContainer.innerHTML = html;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error refreshing ensemble telemetry:', err);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
       }
     }
 

@@ -31,6 +31,7 @@ from app.execution.algo_slicer import (
     TWAPExecutionEngine,
     DynamicVWAPExecutionEngine,
 )
+from app.data.models import CandleBar
 from app.data.streaming import (
     BinaryPacketParser,
     StreamingFeedHandler,
@@ -48,7 +49,8 @@ from app.market.microstructure import (
     OrderBookLevel,
     analyze_order_book,
 )
-from app.market.regime import VolatilityRegimeClassifier
+from app.market.regime import MarketRegime, RegimeState, VolatilityRegimeClassifier
+from app.strategy.ensemble import MetaStrategyEnsemble
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
 from app.reporting.reports import generate_daily_report, list_backtest_summaries
@@ -152,6 +154,9 @@ _sample_tick = StreamingTickPacket(
 )
 _streaming_handler.books["2885"].update_from_tick(_sample_tick)
 
+# M27 — Initialize Multi-Strategy Meta-Ensemble
+_meta_ensemble = MetaStrategyEnsemble()
+
 
 @router.get("/health")
 def get_health():
@@ -206,6 +211,92 @@ def get_strategy_status():
       "signal_interval_minutes": _cfg.strategy.signal_interval_minutes,
       "min_rvol_threshold": str(_cfg.strategy.min_rvol_threshold),
       "entry_cutoff_ist": _cfg.strategy.entry_cutoff_ist,
+  }
+
+
+def _get_regime_state(symbol: str, lookback_bars: int = 60) -> RegimeState | None:
+  with _SessionLocal() as session:
+    cur = session.conn.cursor()
+    cur.execute(
+        "SELECT open, high, low, close, volume FROM market_candles "
+        "WHERE symbol = ? AND interval_minutes = 1 "
+        "ORDER BY timestamp_utc DESC LIMIT ?",
+        (symbol, lookback_bars),
+    )
+    rows = cur.fetchall()
+
+  if not rows or len(rows) < 20:
+    return None
+
+  rows = list(reversed(rows))
+  closes = [float(r[3]) for r in rows]
+  highs = [float(r[1]) for r in rows]
+  lows = [float(r[2]) for r in rows]
+
+  clf = VolatilityRegimeClassifier(min_bars=20)
+  clf.fit(closes, highs, lows)
+  return clf.predict_current()
+
+
+@router.get("/strategy/ensemble/status")
+def get_strategy_ensemble_status(symbol: str = "RELIANCE"):
+  """
+  M27 — Multi-Strategy Meta-Ensemble Status & Dynamic Regime Weights:
+  Returns registered alpha engines, dynamic regime weights computed from prevailing HMM state,
+  and strategy family telemetry.
+  """
+  regime_state = _get_regime_state(symbol)
+  return _meta_ensemble.get_telemetry(regime_state=regime_state)
+
+
+@router.get("/strategy/ensemble/signals")
+def get_strategy_ensemble_signals(symbol: str = "RELIANCE", lookback_bars: int = 60):
+  """
+  M27 — Multi-Strategy Meta-Ensemble Prospective Signal Evaluation:
+  Evaluates recent session bars against all registered alpha engines (ORB Trend, VWAP Reversion, Pairs Stat Arb),
+  resolves cross-strategy conflicts, and synthesizes final conviction orders.
+  """
+  regime_state = _get_regime_state(symbol, lookback_bars)
+
+  with _SessionLocal() as session:
+    cur = session.conn.cursor()
+    cur.execute(
+        "SELECT timestamp_utc, open, high, low, close, volume FROM market_candles "
+        "WHERE symbol = ? ORDER BY timestamp_utc DESC LIMIT ?",
+        (symbol.upper(), lookback_bars),
+    )
+    rows = cur.fetchall()
+
+  bars: list[CandleBar] = []
+  if rows:
+    for r in reversed(rows):
+      ts = datetime.fromisoformat(r[0]) if isinstance(r[0], str) else r[0]
+      bars.append(CandleBar(
+          symbol=symbol.upper(),
+          timestamp_utc=ts,
+          open=to_decimal(str(r[1])),
+          high=to_decimal(str(r[2])),
+          low=to_decimal(str(r[3])),
+          close=to_decimal(str(r[4])),
+          volume=int(r[5]),
+      ))
+
+  synthesized_orders = _meta_ensemble.evaluate_ensemble(
+      symbol=symbol.upper(),
+      session_bars=bars,
+      regime_state=regime_state,
+  )
+
+  weights = _meta_ensemble.compute_dynamic_weights(regime_state)
+
+  return {
+      "symbol": symbol.upper(),
+      "regime": regime_state.regime.value if regime_state else "UNKNOWN",
+      "dynamic_weights": {k: str(v) for k, v in weights.items()},
+      "bars_evaluated": len(bars),
+      "orders_count": len(synthesized_orders),
+      "orders": [o.to_dict() for o in synthesized_orders],
+      "timestamp_utc": datetime.now(timezone.utc).isoformat(),
   }
 
 
