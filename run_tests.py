@@ -24,6 +24,7 @@ from tests.unit import test_drift_surveillance_m22 as t_m22
 from tests.unit import test_capital_allocation_m23 as t_m23
 from tests.unit import test_execution_gateway_m24 as t_m24
 from tests.unit import test_algo_execution_m25 as t_m25
+from tests.unit import test_streaming_m26 as t_m26
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -189,6 +190,16 @@ def run_all() -> int:
           t_m25.test_algo_slicer_aborts_on_excessive_adverse_slippage,
           t_m25.test_algo_execution_coordinator_with_broker_gateway,
           t_m25.test_m25_api_endpoints_integration,
+      ]),
+      ("unit/test_streaming_m26.py", [
+          t_m26.test_binary_packet_encoder_and_decoder_parity,
+          t_m26.test_snapquote_mode3_depth_parsing,
+          t_m26.test_live_order_book_depth_update_and_snapshot,
+          t_m26.test_streaming_feed_handler_tick_dispatch_and_metrics,
+          t_m26.test_streaming_tick_breakout_detector_fires_on_orh_cross,
+          t_m26.test_streaming_tick_breakout_detector_rejects_wide_spread,
+          t_m26.test_streaming_tick_breakout_detector_rejects_bear_regime,
+          t_m26.test_m26_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

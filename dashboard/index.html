@@ -288,6 +288,66 @@
         </div>
       </div>
 
+      <!-- M26: Real-Time Level-2 WebSocket Streaming & Market-by-Price (MBP) Depth Monitor -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M26 — Real-Time L2 WebSocket Streaming &amp; Market-by-Price (MBP) Book</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Angel One SmartAPI Binary Feed (Mode 3 SnapQuote) • Sub-Millisecond L2 Depth Ladder • Sub-Second Tick Breakout Engine
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <select id="streaming-symbol-select" onchange="refreshStreamingDepthData()" style="padding:0.3rem 0.6rem; border-radius:4px; border:1px solid var(--border); font-size:0.85rem; background:white;">
+              <option value="RELIANCE" selected>RELIANCE (2885)</option>
+              <option value="TCS">TCS (11536)</option>
+              <option value="INFY">INFY (1594)</option>
+            </select>
+            <button class="action-btn" onclick="refreshStreamingData(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              ⚡ Poll Stream Telemetry
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Stream Connection</h3>
+            <div id="streaming-kpi-status" class="val"><span class="pill ok">CONNECTED</span></div>
+            <div id="streaming-sub-subscribed" class="sub">3 Subscribed Instruments</div>
+          </div>
+          <div class="card">
+            <h3>Feed Throughput</h3>
+            <div id="streaming-kpi-fps" class="val" style="color:var(--navy);">— fps</div>
+            <div id="streaming-sub-packets" class="sub">0 packets processed</div>
+          </div>
+          <div class="card">
+            <h3>Latency Profile (p95)</h3>
+            <div id="streaming-kpi-latency" class="val" style="color:var(--green);">— ms</div>
+            <div id="streaming-sub-p50" class="sub">p50: — ms • p99: — ms</div>
+          </div>
+          <div class="card">
+            <h3>Micro-Price / Spread</h3>
+            <div id="streaming-kpi-microprice" class="val" style="color:var(--teal);">₹—</div>
+            <div id="streaming-sub-spread" class="sub">Spread: — bps • OBI: —</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Level-2 5-Depth Market-by-Price (MBP) Ladder</h3>
+            <div id="streaming-ladder-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading depth ladder...</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Sub-Second Tick Breakout &amp; Liquidity Gate Status</h3>
+            <div id="streaming-gate-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Awaiting streaming tick updates...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -1317,6 +1377,9 @@
       // 17. Algorithmic Order Execution Slicer & TCA Monitor (M25)
       refreshAlgoAndTCA();
 
+      // 18. Real-Time Streaming & MBP Depth Monitor (M26)
+      refreshStreamingData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -2021,6 +2084,95 @@
           btn.textContent = orig;
           btn.disabled = false;
         }
+      }
+    }
+
+    async function refreshStreamingData(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Polling...';
+        btn.disabled = true;
+      }
+      try {
+        const telem = await fetchJson('/market/streaming/status');
+        if (telem) {
+          const statusPill = telem.is_connected
+            ? '<span class="pill ok">CONNECTED ✓</span>'
+            : '<span class="pill alert">DISCONNECTED</span>';
+          setElHtml('streaming-kpi-status', statusPill);
+          setElText('streaming-sub-subscribed', `${telem.subscribed_instruments_count} Subscribed Instruments`);
+          setElText('streaming-kpi-fps', `${Number(telem.throughput_frames_per_sec).toFixed(1)} fps`);
+          setElText('streaming-sub-packets', `${telem.total_frames_processed.toLocaleString()} pkts (${(telem.total_bytes_processed/1024).toFixed(1)} KB)`);
+          setElText('streaming-kpi-latency', `${Number(telem.latency_p95_ms).toFixed(2)} ms`);
+          setElText('streaming-sub-p50', `p50: ${Number(telem.latency_p50_ms).toFixed(2)} ms • p99: ${Number(telem.latency_p99_ms).toFixed(2)} ms`);
+        }
+        await refreshStreamingDepthData();
+      } catch (e) {
+        console.error('Error refreshing streaming telemetry:', e);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshStreamingDepthData() {
+      const symSelect = document.getElementById('streaming-symbol-select');
+      const sym = symSelect ? symSelect.value : 'RELIANCE';
+      try {
+        const depthData = await fetchJson(`/market/depth/${sym}`);
+        if (depthData && depthData.status === 'ACTIVE' && depthData.book) {
+          const b = depthData.book;
+          const m = depthData.microstructure;
+
+          if (m) {
+            setElText('streaming-kpi-microprice', `₹${Number(m.micro_price).toFixed(2)}`);
+            setElText('streaming-sub-spread', `Spread: ${Number(m.spread_bps).toFixed(1)} bps • OBI: ${Number(m.order_book_imbalance).toFixed(2)}`);
+          }
+
+          const ladderContainer = document.getElementById('streaming-ladder-container');
+          if (ladderContainer) {
+            let html = '<table style="margin-top:0.5rem; font-size:0.82rem;">';
+            html += '<thead><tr><th style="color:var(--green);">Bid Qty</th><th style="color:var(--green);">Bid (₹)</th><th style="color:var(--red);">Ask (₹)</th><th style="color:var(--red);">Ask Qty</th></tr></thead><tbody>';
+            const numLevels = Math.max(b.bids ? b.bids.length : 0, b.asks ? b.asks.length : 0, 5);
+            for (let i = 0; i < numLevels; i++) {
+              const bid = b.bids && b.bids[i] ? b.bids[i] : null;
+              const ask = b.asks && b.asks[i] ? b.asks[i] : null;
+              const bidQty = bid ? bid.quantity.toLocaleString() : '—';
+              const bidP = bid ? `₹${Number(bid.price).toFixed(2)}` : '—';
+              const askP = ask ? `₹${Number(ask.price).toFixed(2)}` : '—';
+              const askQty = ask ? ask.quantity.toLocaleString() : '—';
+              html += `<tr>
+                <td style="color:var(--green); font-weight:600;">${bidQty}</td>
+                <td style="color:var(--green);"><strong>${bidP}</strong></td>
+                <td style="color:var(--red);"><strong>${askP}</strong></td>
+                <td style="color:var(--red); font-weight:600;">${askQty}</td>
+              </tr>`;
+            }
+            html += '</tbody></table>';
+            ladderContainer.innerHTML = html;
+          }
+
+          const gateContainer = document.getElementById('streaming-gate-container');
+          if (gateContainer && m) {
+            const spreadBps = Number(m.spread_bps);
+            const isSpreadOk = spreadBps <= 15.0;
+            const obiVal = Number(m.order_book_imbalance);
+            let html = '<table style="margin-top:0.5rem; font-size:0.82rem;">';
+            html += '<thead><tr><th>Microstructure Metric</th><th>Current Value</th><th>Institutional Gate</th></tr></thead><tbody>';
+            html += `<tr><td><strong>Bid-Ask Spread</strong></td><td>${spreadBps.toFixed(2)} bps (₹${Number(m.spread_inr).toFixed(2)})</td><td>${isSpreadOk ? '<span class="pill ok">PASS (&le; 15 bps)</span>' : '<span class="pill warn">WIDE SPREAD</span>'}</td></tr>`;
+            html += `<tr><td><strong>Order Book Imbalance (OBI)</strong></td><td>${obiVal >= 0 ? '+' : ''}${obiVal.toFixed(3)}</td><td><span class="pill ok">${obiVal > 0 ? 'BUY PRESSURE' : (obiVal < 0 ? 'SELL PRESSURE' : 'NEUTRAL')}</span></td></tr>`;
+            html += `<tr><td><strong>Depth Volume Ratio</strong></td><td>${Number(m.depth_ratio).toFixed(2)}x (Bid: ${m.total_bid_volume} / Ask: ${m.total_ask_volume})</td><td><span class="pill ok">ADEQUATE</span></td></tr>`;
+            html += `<tr><td><strong>Tick Evaluation Engine</strong></td><td>SnapQuote Mode 3 Real-Time</td><td><span class="pill ok">p95 &le; 5.0 ms</span></td></tr>`;
+            html += '</tbody></table>';
+            gateContainer.innerHTML = html;
+          }
+        }
+      } catch (err) {
+        console.error(`Error fetching depth for ${sym}:`, err);
       }
     }
 

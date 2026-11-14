@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (129/129 tests passing)
+# 2. Run the unified zero-trust test suite (137/137 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -53,7 +53,10 @@ python scripts/run_gateway_reconciliation.py
 # 15. Run the M25 Algorithmic Order Execution Slicer & TCA Benchmarking CLI
 python scripts/run_algo_execution_benchmarking.py
 
-# 16. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 16. Run the M26 Real-Time Level-2 WebSocket Streaming & Tick Breakout Replay Harness
+python scripts/run_streaming_tick_harness.py --ticks 1500
+
+# 17. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -107,4 +110,5 @@ curl http://localhost:8000/health
 - **M23 Dynamic Portfolio Capital Allocation & Margin Stress Engine (`app/risk/allocation.py`, `app/risk/margin_stress.py`)**: Institutional Equal Risk Contribution (ERC) cyclical optimization in pure Decimal solving for equal risk contributions across multi-asset books; evaluates Diversification Ratio ($DR$); models SEBI cash intraday (MIS) peak margins with deterministic pre-trade stress testing under composite instantaneous shocks (-2.5% market gap, +50% volatility margin multiplier, and 20 bps liquidity haircut); rejects prospective signals exceeding 85% stressed margin utilization (`INTRADAY_MARGIN_STRESS_EXCEEDED`). Results exposed via `GET /risk/allocation` and `GET /risk/margin-stress`. Report in `docs/M23_CAPITAL_ALLOCATION_AND_MARGIN_STRESS_REPORT.md`.
 - **M24 Multi-Broker Execution Gateway & Shadow Reconciler (`app/execution/gateway.py`, `app/execution/shadow_reconciler.py`)**: Protocol-agnostic `BrokerGateway` interface with `PaperBrokerGateway` (in-process, 0.25 ms latency) and `MockAngelSmartAPIGateway` (REST emulation, 12.5 ms) adapters; `SmartOrderRouter` (SOR) selecting venues by latency; `RealTimeShadowReconciler` detecting ORPHAN/PHANTOM/QUANTITY discrepancies in <0.05 ms with automatic fail-closed `RiskEngine.trigger_kill_switch()` on CRITICAL variance; 4-phase fault injection soak CLI with scorecard. Results exposed via `GET /execution/gateway/status` and `GET /execution/reconciliation/status`. Report in `docs/M24_EXECUTION_GATEWAY_AND_RECONCILER_REPORT.md`.
 - **M25 Algorithmic Order Execution Slicer, Microstructure Surveillance & Post-Trade TCA (`app/execution/algo_slicer.py`, `app/market/microstructure.py`, `app/execution/tca.py`)**: Institutional `TWAPExecutionEngine` and `DynamicVWAPExecutionEngine` with exact share conservation and deterministic timing jitter, achieving 51%–55% market impact reduction vs monolithic lump-sum entries; `MicrostructureLiquidityGate` monitoring Bid-Ask Spread (bps), Order Book Imbalance (OBI), and Micro-Price with spread widening deferral (>3× baseline); Perold (1988) Post-Trade Implementation Shortfall (IS) decomposition into Market Impact, Delay Cost, Opportunity Cost, and Fees. Results exposed via `GET /execution/algo/status` and `GET /execution/tca/summary`. Report in `docs/M25_ALGO_EXECUTION_AND_TCA_REPORT.md`.
+- **M26 Real-Time Level-2 WebSocket Streaming, MBP Reconstruction & Sub-Second Breakout (`app/data/streaming.py`, `app/strategy/orb/tick_detector.py`)**: High-performance binary frame parser (`BinaryPacketParser`) decoding Angel One WebSocket 2.0 SnapQuote (Mode 3) frames (123-byte header + 200-byte depth ladders) into pure `Decimal` tick models with zero binary float drift; maintains thread-safe in-memory `LiveOrderBook` objects per constituent; evaluates sub-second tick breakouts against 15m Opening Range High ($Tick.Price > ORH$) immediately upon arrival between 09:30 and 14:30 IST, gated by M25 `MicrostructureLiquidityGate` and M19 HMM regime; replay harness achieves >8,100 ticks/sec with $p_{95} \le 5.0\text{ ms}$ reaction latency. Results exposed via `GET /market/streaming/status` and `GET /market/depth/{symbol}`. Report in `docs/M26_STREAMING_TICK_AND_MBP_REPORT.md`.
 - **Verified Indian Statutory Cost Model (`app/execution/costs.py`)**: Models percentage-capped brokerage (`min(₹20, 0.03%)` per [Zerodha Charges](https://zerodha.com/charges/)), `0.025%` sell-side STT, `0.003%` buy-side stamp duty, NSE transaction charges, SEBI/IPFT turnover fees, and `18%` GST.

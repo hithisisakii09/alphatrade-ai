@@ -31,6 +31,13 @@ from app.execution.algo_slicer import (
     TWAPExecutionEngine,
     DynamicVWAPExecutionEngine,
 )
+from app.data.streaming import (
+    BinaryPacketParser,
+    StreamingFeedHandler,
+    StreamingTickPacket,
+    SUBSCRIPTION_MODE_SNAPQUOTE,
+    EXCHANGE_NSE_CM,
+)
 from app.execution.tca import (
     ExecutionSliceFill,
     compute_implementation_shortfall,
@@ -103,6 +110,47 @@ _sample_twap_engine.record_slice_fill(
     fee_inr=Decimal("4.00"),
 )
 _algo_coordinator.register_algorithm(_sample_twap_engine)
+
+# M26 — Initialize real-time streaming feed handler with pre-populated instruments
+_streaming_handler = StreamingFeedHandler()
+_streaming_handler.register_instrument("RELIANCE", "2885")
+_streaming_handler.register_instrument("TCS", "11536")
+_streaming_handler.register_instrument("INFY", "1594")
+
+_sample_bids = [
+    OrderBookLevel(price=Decimal("2850.00"), quantity=450, orders_count=5),
+    OrderBookLevel(price=Decimal("2849.50"), quantity=600, orders_count=8),
+    OrderBookLevel(price=Decimal("2849.00"), quantity=1200, orders_count=14),
+    OrderBookLevel(price=Decimal("2848.50"), quantity=1500, orders_count=19),
+    OrderBookLevel(price=Decimal("2848.00"), quantity=2000, orders_count=25),
+]
+_sample_asks = [
+    OrderBookLevel(price=Decimal("2850.50"), quantity=350, orders_count=4),
+    OrderBookLevel(price=Decimal("2851.00"), quantity=500, orders_count=6),
+    OrderBookLevel(price=Decimal("2851.50"), quantity=900, orders_count=11),
+    OrderBookLevel(price=Decimal("2852.00"), quantity=1400, orders_count=16),
+    OrderBookLevel(price=Decimal("2852.50"), quantity=1800, orders_count=22),
+]
+_sample_tick = StreamingTickPacket(
+    subscription_mode=SUBSCRIPTION_MODE_SNAPQUOTE,
+    exchange_type=EXCHANGE_NSE_CM,
+    token="2885",
+    sequence_number=1,
+    exchange_timestamp_utc=_now_utc,
+    last_traded_price=Decimal("2850.25"),
+    last_traded_quantity=50,
+    average_traded_price=Decimal("2849.80"),
+    volume_traded_today=1542000,
+    total_buy_quantity=184500,
+    total_sell_quantity=176200,
+    open_price=Decimal("2840.00"),
+    high_price=Decimal("2855.00"),
+    low_price=Decimal("2838.00"),
+    close_price=Decimal("2845.00"),
+    bids=_sample_bids,
+    asks=_sample_asks,
+)
+_streaming_handler.books["2885"].update_from_tick(_sample_tick)
 
 
 @router.get("/health")
@@ -732,6 +780,46 @@ def get_market_regime(symbol: str = "RELIANCE", lookback_bars: int = 60):
       "log_likelihood": round(state.log_likelihood, 4) if state.log_likelihood != float("-inf") else None,
       "regime_distribution": {k: round(v, 4) for k, v in dist.items()},
       "hmm_trained": clf.is_trained,
+  }
+
+
+@router.get("/market/streaming/status")
+def get_market_streaming_status():
+  """
+  M26 — Real-Time L2 WebSocket Streaming Telemetry:
+  Returns connection state, throughput (fps), bytes processed, and p50/p95/p99 tick latency percentiles.
+  """
+  return _streaming_handler.get_telemetry()
+
+
+@router.get("/market/depth/{symbol}")
+def get_market_depth(symbol: str = "RELIANCE"):
+  """
+  M26 — Level-2 Market-by-Price (MBP) 5-Depth Ladder & Microstructure:
+  Returns live order book bid/ask ladders, spread (bps), OBI, and micro-price.
+  """
+  sym = symbol.strip().upper()
+  token = _streaming_handler.symbol_to_token.get(sym)
+  if not token or token not in _streaming_handler.books:
+    return {
+        "status": "NOT_SUBSCRIBED",
+        "symbol": sym,
+        "token": None,
+        "book": None,
+        "microstructure": None,
+        "message": f"Instrument {sym} is not currently subscribed to streaming feed.",
+    }
+
+  book = _streaming_handler.books[token]
+  depth = book.get_snapshot()
+  micro_snap = analyze_order_book(depth)
+
+  return {
+      "status": "ACTIVE",
+      "symbol": sym,
+      "token": token,
+      "book": book.to_dict(),
+      "microstructure": micro_snap.to_dict(),
   }
 
 
