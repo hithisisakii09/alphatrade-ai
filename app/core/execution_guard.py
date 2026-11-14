@@ -51,3 +51,10 @@ def is_live_mode_authorized() -> bool:
     return True
   except Exception:
     return False
+
+
+def assert_safe_execution_mode(mode: str | None = None) -> str:
+  """Verifies that the execution mode is valid: PAPER (by default) or LIVE (if two-factor authorized)."""
+  if is_live_mode_authorized():
+    return assert_live_mode_authorized(mode)
+  return assert_paper_mode(mode)

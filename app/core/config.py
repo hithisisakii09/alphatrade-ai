@@ -4,7 +4,7 @@ from decimal import Decimal
 import json
 import os
 from pydantic import BaseModel, Field
-from app.core.execution_guard import assert_paper_mode
+from app.core.execution_guard import assert_paper_mode, assert_safe_execution_mode
 
 
 class RiskProfileConfig(BaseModel):
@@ -120,7 +120,7 @@ def load_app_config(
     database_url: str | None = None,
 ) -> AppConfig:
   _load_env_file()
-  mode = assert_paper_mode(execution_mode)
+  mode = assert_safe_execution_mode(execution_mode)
   base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   with open(os.path.join(base_dir, "config/strategy/orb_v2.json"), "r") as f:
     strat_raw = json.load(f)

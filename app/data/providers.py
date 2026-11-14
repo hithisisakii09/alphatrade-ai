@@ -13,7 +13,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.clock import IST, to_ist
-from app.core.execution_guard import assert_paper_mode
+from app.core.execution_guard import assert_paper_mode, assert_safe_execution_mode
 from app.data.models import CandleBar
 
 
@@ -115,7 +115,7 @@ class AngelSmartAPIDataProvider:
       password: str | None = None,
       jwt_token: str | None = None,
   ):
-    assert_paper_mode()
+    assert_safe_execution_mode()
     self.api_key = api_key or os.environ.get("ANGEL_API_KEY")
     self.client_code = client_code or os.environ.get("ANGEL_CLIENT_CODE")
     self.totp_secret = totp_secret or os.environ.get("ANGEL_TOTP_SECRET")
@@ -181,7 +181,7 @@ class AngelSmartAPIDataProvider:
 
   def login(self, password: str | None = None) -> str:
     """Authenticates via Angel One login API using clientcode, password/MPIN, and TOTP."""
-    assert_paper_mode()
+    assert_safe_execution_mode()
     pwd = password or self.password
     if not pwd:
       raise ProviderAuthenticationError(
@@ -260,7 +260,7 @@ class AngelSmartAPIDataProvider:
       max_retries: int = 3,
   ) -> list[CandleBar]:
     """Fetches 1-minute historical candles from Angel One getCandleData."""
-    assert_paper_mode()
+    assert_safe_execution_mode()
     token = symbol_token or self.resolve_symbol_token(symbol)
     if not token:
       raise ProviderDataError(
@@ -345,7 +345,7 @@ class FyersV3DataProvider:
   provider_name = "FYERS_V3"
 
   def __init__(self, app_id: str | None = None, access_token: str | None = None):
-    assert_paper_mode()
+    assert_safe_execution_mode()
     self.app_id = app_id or os.environ.get("FYERS_APP_ID")
     self.access_token = access_token or os.environ.get("FYERS_ACCESS_TOKEN")
 
@@ -371,7 +371,7 @@ class FyersV3DataProvider:
   def fetch_1m_candles(
       self, symbol: str, start_utc: datetime, end_utc: datetime, max_retries: int = 3
   ) -> list[CandleBar]:
-    assert_paper_mode()
+    assert_safe_execution_mode()
     if not self.app_id or not self.access_token or "your_" in self.app_id:
       raise ProviderAuthenticationError("FYERS API credentials missing. Set FYERS_APP_ID and FYERS_ACCESS_TOKEN.")
     fyers_sym = f"NSE:{symbol}-EQ" if not symbol.startswith("NSE:") else symbol
@@ -414,7 +414,7 @@ class UpstoxV3DataProvider:
   provider_name = "UPSTOX_V3"
 
   def __init__(self, access_token: str | None = None):
-    assert_paper_mode()
+    assert_safe_execution_mode()
     self.access_token = access_token or os.environ.get("UPSTOX_ACCESS_TOKEN")
 
   def parse_upstox_response(self, symbol: str, raw_candles: list[list]) -> list[CandleBar]:
@@ -444,7 +444,7 @@ class UpstoxV3DataProvider:
       instrument_key: str | None = None,
       max_retries: int = 3,
   ) -> list[CandleBar]:
-    assert_paper_mode()
+    assert_safe_execution_mode()
     if not self.access_token or "your_" in self.access_token:
       raise ProviderAuthenticationError("Upstox credentials missing. Set UPSTOX_ACCESS_TOKEN.")
     key = instrument_key or f"NSE_EQ|{symbol}"
@@ -477,7 +477,7 @@ class LocalCsvDataProvider:
   provider_name = "LOCAL_CSV"
 
   def __init__(self, data_dir: str = "data/historical"):
-    assert_paper_mode()
+    assert_safe_execution_mode()
     self.data_dir = data_dir
 
   def fetch_1m_candles(self, symbol: str, start_utc: datetime, end_utc: datetime) -> list[CandleBar]:

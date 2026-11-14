@@ -20,7 +20,11 @@ from app.core.database import (
     TradeSignalRecord,
     init_db,
 )
-from app.core.execution_guard import assert_paper_mode
+from app.core.execution_guard import (
+    assert_paper_mode,
+    assert_safe_execution_mode,
+    is_live_mode_authorized,
+)
 from app.core.money import round_paise, to_decimal
 from app.data.cache import LiveCandleCache
 from app.data.instruments import InstrumentRegistry
@@ -28,6 +32,7 @@ from app.data.models import CandleBar
 from app.data.providers import MarketDataProvider, get_data_provider
 from app.data.validator import CandleIngestionValidator, aggregate_1m_to_nm
 from app.execution.costs import NSECostEngine
+from app.execution.gateway import BrokerOrderRequest, LiveAngelSmartAPIGateway
 from app.execution.paper_broker import PaperBroker
 from app.market.indicators import (
     compute_atr_series,
@@ -171,12 +176,19 @@ class ScheduledDailyRunner:
       enable_intraday_poll: bool | None = None,
       symbols_universe: list[str] | None = None,
   ):
-    assert_paper_mode()
+    assert_safe_execution_mode()
     self.config = config or load_app_config(database_url=database_url)
     self.db_url = self.config.database_url
     _, self.SessionLocal = init_db(self.db_url)
     self.calendar = NSECalendar()
     self.provider: MarketDataProvider = get_data_provider(self.config.data_provider)
+    self.live_gateway: LiveAngelSmartAPIGateway | None = None
+    if is_live_mode_authorized():
+      try:
+        self.live_gateway = LiveAngelSmartAPIGateway()
+        logger.info("ScheduledDailyRunner live execution bridge active with LiveAngelSmartAPIGateway")
+      except Exception as e:
+        logger.warning(f"Live broker gateway initialization deferred: {e}")
     self.notification_service = WebhookNotificationService()
     self.registry = InstrumentRegistry()
     self.risk_profile = self.config.strategy.risk_profiles[self.config.active_risk_profile]
@@ -393,6 +405,28 @@ class ScheduledDailyRunner:
       ledger = PortfolioLedger(db, self.risk_profile.reference_capital)
       broker = PaperBroker(db, ledger, self.cost_engine, self.risk_engine)
       broker.recover_state_after_restart()
+
+      # If authorized for LIVE execution, synchronize available cash with Angel One RMS
+      if is_live_mode_authorized() and self.live_gateway:
+        try:
+          margins = self.live_gateway.get_margins()
+          if margins.available_cash > Decimal("0.00"):
+            curr_cash = ledger.get_cash_balance()
+            if curr_cash != margins.available_cash:
+              diff = margins.available_cash - curr_cash
+              ledger.record_ledger_movement(
+                  timestamp_utc=ts,
+                  entry_type="RMS_CASH_SYNC",
+                  amount_inr=diff,
+                  symbol=None,
+                  reference_id=f"RMS_{int(time.time())}",
+                  description=f"Synchronized available cash with Angel One RMS: Rs. {margins.available_cash}",
+              )
+              db.commit()
+              logger.info(f"Synchronized PortfolioLedger cash with Angel One RMS: Rs. {margins.available_cash:,.2f}")
+        except Exception as e:
+          logger.warning(f"Could not sync RMS margin at market open: {e}")
+
     return f"Market open & live candle ingestion initiated at {ts.isoformat()}"
 
   def job_opening_range_formed(self, now_utc: datetime | None = None) -> str:
@@ -440,6 +474,23 @@ class ScheduledDailyRunner:
               "exit_price": str(fill.fill_price),
               "reason": "EOD_FORCED_LIQUIDATION",
           })
+
+          # If in authorized LIVE mode, dispatch liquidation order to Angel One SmartAPI
+          if is_live_mode_authorized() and self.live_gateway:
+            try:
+              live_liq_req = BrokerOrderRequest(
+                  symbol=pos.symbol,
+                  side="SELL",
+                  quantity=pos.quantity,
+                  price=ref_price,
+                  order_type="MARKET",
+                  product_type="MIS",
+                  idempotency_key=f"EOD_LIQ_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+              )
+              live_resp = self.live_gateway.place_order(live_liq_req)
+              logger.info(f"Live Angel One EOD Liquidation: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
+            except Exception as e:
+              logger.error(f"Live EOD liquidation failed for {pos.symbol}: {e}")
           if self.notification_service.is_configured:
             try:
               msg = self.notification_service.format_position_exit_message(
@@ -618,6 +669,22 @@ class ScheduledDailyRunner:
                     "reason": eval_res.exit_reason,
                     "exit_price": str(sell_fill.fill_price),
                 })
+                # If in authorized LIVE mode, dispatch exit order to Angel One SmartAPI
+                if is_live_mode_authorized() and self.live_gateway:
+                  try:
+                    live_exit_req = BrokerOrderRequest(
+                        symbol=sym,
+                        side="SELL",
+                        quantity=open_pos.quantity,
+                        price=eval_res.trigger_price,
+                        order_type="MARKET",
+                        product_type="MIS",
+                        idempotency_key=f"LIVE_EXIT_{open_pos.position_id}_{latest_bar.timestamp_utc.strftime('%H%M%S')}",
+                    )
+                    live_resp = self.live_gateway.place_order(live_exit_req)
+                    logger.info(f"Live Angel One Exit Order for {sym}: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
+                  except Exception as e:
+                    logger.error(f"Live exit failed for {sym}: {e}")
               continue
 
           # 4. Opening Range Formation (09:15 - 09:30 IST)
@@ -775,6 +842,22 @@ class ScheduledDailyRunner:
                         "symbol": sym,
                         "fill_price": str(fill.fill_price),
                     })
+                    # If in authorized LIVE mode, dispatch entry order to Angel One SmartAPI
+                    if is_live_mode_authorized() and self.live_gateway:
+                      try:
+                        live_req = BrokerOrderRequest(
+                            symbol=sym,
+                            side="BUY",
+                            quantity=risk_dec.approved_quantity,
+                            price=latest_bar.close,
+                            order_type="MARKET",
+                            product_type="MIS",
+                            idempotency_key=f"LIVE_ENTRY_{sig_eval.signal_id}",
+                        )
+                        live_resp = self.live_gateway.place_order(live_req)
+                        logger.info(f"Live Angel One Entry Order for {sym}: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
+                      except Exception as e:
+                        logger.error(f"Live entry failed for {sym}: {e}")
                 else:
                   trade_sig.status = f"REJECTED_{risk_dec.reason_code}"
                 db.commit()
