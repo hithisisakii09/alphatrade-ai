@@ -31,6 +31,8 @@ class RiskProfileConfig(BaseModel):
   max_participation_rate_pct: Decimal = Field(default=Decimal("0.05"))
   require_regime_filter: bool = Field(default=False)
   allowed_regimes: list[str] = Field(default_factory=lambda: ["BULL", "NEUTRAL"])
+  require_margin_stress_gate: bool = Field(default=False)
+  max_stressed_margin_utilization_pct: Decimal = Field(default=Decimal("0.85"))
   opening_range_minutes: int | None = Field(default=None)
   min_rvol_threshold: Decimal | None = Field(default=None)
   require_macro_trend_alignment: bool | None = Field(default=None)

@@ -1,7 +1,7 @@
 """Read-only FastAPI endpoints implementing all 11 specification routes."""
 
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 import os
 from fastapi import APIRouter, Response
 from fastapi.responses import HTMLResponse
@@ -27,6 +27,8 @@ from app.research.ablation import run_augmented_factor_ablation_from_db
 from app.research.monte_carlo import run_monte_carlo_resampling
 from app.research.optimizer import run_hyperparameter_optimization
 from app.surveillance.drift import BaselineDistribution, StatisticalDriftEngine
+from app.risk.allocation import RiskParityAllocator
+from app.risk.margin_stress import IntradayMarginStressEngine
 from app.risk.engine import RiskEngine
 from app.risk.var import PortfolioVaREngine
 from app.services.daily_runner import ScheduledDailyRunner
@@ -653,6 +655,101 @@ def get_strategy_drift_endpoint(
 
   r_multiples = [to_decimal(str(r[0])) for r in reversed(rows)] if rows else []
   report = engine.analyze_trades(r_multiples)
+  return report.to_dict()
+
+
+@router.get("/risk/allocation")
+def get_risk_allocation_endpoint(
+    symbols: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN",
+    method: str = "EQUAL_RISK_CONTRIBUTION",
+    lookback_bars: int = 1500,
+):
+  """
+  M23 — Dynamic Capital Allocation & Risk Parity:
+  Computes Equal Risk Contribution (ERC) weights, asset volatilities,
+  marginal risk contributions, and portfolio diversification ratio.
+  """
+  sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+  db_file = _cfg.database_url.replace("sqlite:///", "")
+  allocator = RiskParityAllocator(db_path=db_file)
+
+  with _SessionLocal() as session:
+    cur = session.conn.cursor()
+    prices: dict[str, Decimal] = {}
+    for s in sym_list:
+      cur.execute(
+          "SELECT close FROM market_candles WHERE symbol = ? ORDER BY timestamp_utc DESC LIMIT 1",
+          (s,),
+      )
+      row = cur.fetchone()
+      prices[s] = to_decimal(str(row[0])) if row else Decimal("1000.00")
+
+    prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+    ledger = PortfolioLedger(session, prof.reference_capital)
+    cash_bal = ledger.get_cash_balance()
+    deployed = ledger.get_deployed_exposure()
+    unrealized = ledger.get_daily_unrealized_pnl()
+    total_eq = cash_bal + deployed + unrealized
+
+  rep = allocator.allocate(
+      symbols=sym_list,
+      prices=prices,
+      total_capital_inr=total_eq if total_eq > Decimal("0") else prof.reference_capital,
+      deployable_pct=prof.max_capital_deployed_pct,
+      method=method.upper(),
+      lookback_bars=lookback_bars,
+  )
+  return rep.to_dict()
+
+
+@router.get("/risk/margin-stress")
+def get_margin_stress_endpoint(
+    symbols: str | None = None,
+    candidate_symbol: str | None = None,
+    candidate_qty: int = 0,
+    candidate_price: float | None = None,
+):
+  """
+  M23 — Pre-Trade Intraday Margin Stress & Headroom:
+  Evaluates portfolio margin utilization under joint instantaneous shocks:
+  -2.5% market gap drop, +50% clearing house margin spike, and 20 bps liquidity haircut.
+  """
+  engine = IntradayMarginStressEngine()
+  with _SessionLocal() as session:
+    prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+    ledger = PortfolioLedger(session, prof.reference_capital)
+    cash_bal = ledger.get_cash_balance()
+    deployed = ledger.get_deployed_exposure()
+    unrealized = ledger.get_daily_unrealized_pnl()
+    total_eq = cash_bal + deployed + unrealized
+
+    open_positions: dict[str, tuple[int, Decimal]] = {}
+    db_positions = session.query(PositionRecord).filter(PositionRecord.status == "OPEN").all()
+    for p in db_positions:
+      open_positions[p.symbol] = (p.quantity, to_decimal(p.entry_price))
+
+    if not open_positions and symbols:
+      sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+      cur = session.conn.cursor()
+      per_sym_notional = (total_eq * Decimal("0.80")) / Decimal(len(sym_list)) if sym_list else Decimal("0")
+      for s in sym_list:
+        cur.execute(
+            "SELECT close FROM market_candles WHERE symbol = ? ORDER BY timestamp_utc DESC LIMIT 1",
+            (s,),
+        )
+        row = cur.fetchone()
+        p_val = to_decimal(str(row[0])) if row else Decimal("1000.00")
+        qty = int((per_sym_notional / p_val).to_integral_value(rounding=ROUND_DOWN)) if p_val > Decimal("0") else 1
+        open_positions[s] = (max(1, qty), p_val)
+
+  report = engine.evaluate_stress(
+      open_positions=open_positions,
+      candidate_symbol=candidate_symbol.upper() if candidate_symbol else None,
+      candidate_qty=candidate_qty,
+      candidate_price=Decimal(str(candidate_price)) if candidate_price is not None else Decimal("0.00"),
+      total_equity_inr=total_eq if total_eq > Decimal("0") else prof.reference_capital,
+      available_cash_inr=cash_bal if cash_bal > Decimal("0") else prof.reference_capital,
+  )
   return report.to_dict()
 
 

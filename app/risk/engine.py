@@ -54,11 +54,13 @@ class RiskEngine:
       liquidation_deadline_ist: str = "15:15",
       registry: Any = None,
       var_engine: Any = None,
+      margin_stress_engine: Any = None,
   ):
     self.profile = profile
     self.cost_engine = cost_engine
     self.registry = registry
     self.var_engine = var_engine
+    self.margin_stress_engine = margin_stress_engine
     self.entry_cutoff = time.fromisoformat(entry_cutoff_ist)
     self.liquidation_start = time.fromisoformat(liquidation_start_ist)
     self.liquidation_deadline = time.fromisoformat(liquidation_deadline_ist)
@@ -425,6 +427,44 @@ class RiskEngine:
             explanation=(
                 f"Rejected: Requested quantity {final_qty} shares exceeds maximum participation "
                 f"limit {max_allowed_qty} shares ({max_part_pct * 100:.1f}% of bar volume {bar_volume})."
+            ),
+        )
+
+    # 6d. Pre-Trade Intraday Margin Stress Gate
+    if getattr(self.profile, "require_margin_stress_gate", False):
+      if self.margin_stress_engine is None:
+        from app.risk.margin_stress import IntradayMarginStressEngine
+        max_util = getattr(self.profile, "max_stressed_margin_utilization_pct", Decimal("0.85"))
+        self.margin_stress_engine = IntradayMarginStressEngine(max_stressed_utilization_pct=max_util)
+
+      open_pos_map: dict[str, tuple[int, Decimal]] = {}
+      if open_positions_Symbols and to_decimal(deployed_exposure_inr) > Decimal("0"):
+        per_sym_exp = round_paise(to_decimal(deployed_exposure_inr) / Decimal(len(open_positions_Symbols)))
+        for op in open_positions_Symbols:
+          open_pos_map[op] = (1, per_sym_exp)
+
+      stress_report = self.margin_stress_engine.evaluate_stress(
+          open_positions=open_pos_map,
+          candidate_symbol=symbol,
+          candidate_qty=final_qty,
+          candidate_price=entry_p,
+          total_equity_inr=cap,
+          available_cash_inr=to_decimal(available_cash_inr),
+      )
+
+      if not stress_report.passed:
+        return RiskApprovalDecision(
+            approved=False,
+            reason_code="INTRADAY_MARGIN_STRESS_EXCEEDED",
+            approved_quantity=0,
+            initial_stop_price=levels.initial_stop_price,
+            trailing_activation_price=trailing_activation_p,
+            risk_budget_inr=risk_budget,
+            estimated_roundtrip_cost_inr=Decimal("0.00"),
+            cost_to_risk_ratio=Decimal("0.0000"),
+            explanation=(
+                f"Rejected: Pre-trade margin stress test failed. "
+                f"{stress_report.rejection_reason}"
             ),
         )
 

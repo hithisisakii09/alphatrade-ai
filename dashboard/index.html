@@ -591,6 +591,54 @@
           <p style="color:var(--muted); font-size:0.85rem;">Calculating cross-asset covariance matrix...</p>
         </div>
       </div>
+
+      <!-- M23 Dynamic Portfolio Capital Allocation & Margin Stress Monitor -->
+      <div class="section-card" style="margin-top: 1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Dynamic Capital Allocation (Risk Parity) &amp; Pre-Trade Margin Stress (M23)</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Equal Risk Contribution (ERC) Cyclical Optimization • SEBI Peak Margin (20% MIS) • -2.5% Gap &amp; +50% Volatility Stress Gate (&le; 85%)
+            </p>
+          </div>
+          <button class="action-btn" onclick="refreshAllocationAndStress(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+            ⚡ Re-Calculate Allocation &amp; Stress
+          </button>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Portfolio Volatility &amp; DR</h3>
+            <div id="alloc-kpi-vol-dr" class="val" style="color:var(--teal);">—</div>
+            <div id="alloc-sub-vol-dr" class="sub">Diversification Ratio</div>
+          </div>
+          <div class="card">
+            <h3>Parity Target Contrib</h3>
+            <div id="alloc-kpi-parity" class="val" style="color:var(--green);">—</div>
+            <div class="sub">Target PRC per asset (1/N)</div>
+          </div>
+          <div class="card">
+            <h3>Base Margin (20% MIS)</h3>
+            <div id="alloc-kpi-base-margin" class="val" style="color:var(--navy);">—</div>
+            <div id="alloc-sub-base-util" class="sub">Nominal Utilization</div>
+          </div>
+          <div class="card">
+            <h3>Stressed Margin Utilization</h3>
+            <div id="alloc-kpi-stressed-util" class="val" style="color:var(--amber);">—</div>
+            <div id="alloc-sub-stressed-gate" class="sub">Composite Shock Gate (&le; 85%)</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:0.5rem;">Active Risk Parity Allocations (Equal Risk Contribution)</h3>
+        <div id="alloc-table-container" style="overflow-x:auto; margin-bottom:1.5rem;">
+          <p style="color:var(--muted); font-size:0.85rem;">Loading optimal risk parity weights...</p>
+        </div>
+
+        <h3 style="margin-bottom:0.5rem;">Intraday Margin Stress Scenarios &amp; Headroom Surveillance</h3>
+        <div id="stress-table-container" style="overflow-x:auto;">
+          <p style="color:var(--muted); font-size:0.85rem;">Simulating instantaneous stress shocks...</p>
+        </div>
+      </div>
     </section>
 
     <!-- 5. APScheduler Runner -->
@@ -1154,6 +1202,9 @@
       // 14. Strategy Drift Surveillance Monitor
       refreshDriftData();
 
+      // 15. Dynamic Capital Allocation & Margin Stress Monitor
+      refreshAllocationAndStress();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1589,6 +1640,99 @@
         await refreshAllData();
       } catch (e) {
         alert('Backtest error: ' + e.message);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshAllocationAndStress(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Calculating...';
+        btn.disabled = true;
+      }
+      try {
+        const [allocRes, stressRes] = await Promise.all([
+          fetchJson('/risk/allocation'),
+          fetchJson('/risk/margin-stress')
+        ]);
+
+        if (allocRes && allocRes.allocations) {
+          const volDaily = Number(allocRes.portfolio_volatility_daily_pct).toFixed(2);
+          const dr = Number(allocRes.diversification_ratio).toFixed(4);
+          setElText('alloc-kpi-vol-dr', `${volDaily}% (DR: ${dr})`);
+          setElText('alloc-sub-vol-dr', `Allocated Notional: ₹${Number(allocRes.allocated_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+
+          const nAssets = allocRes.allocations.length;
+          const targetPrc = nAssets > 0 ? (100 / nAssets).toFixed(2) : '0.00';
+          setElText('alloc-kpi-parity', `${targetPrc}% Parity`);
+
+          const allocContainer = document.getElementById('alloc-table-container');
+          if (allocContainer) {
+            let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Symbol</th><th>Price (₹)</th><th>Daily Vol</th><th>Optimal Weight</th><th>Target Notional</th><th>Shares</th><th>PRC (%)</th></tr></thead><tbody>';
+            allocRes.allocations.forEach(a => {
+              const wtPct = (Number(a.weight) * 100).toFixed(2);
+              const prcPct = Number(a.percentage_risk_contribution_pct).toFixed(2);
+              html += `<tr>
+                <td><strong>${a.symbol}</strong></td>
+                <td>₹${Number(a.price_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>${Number(a.volatility_daily_pct).toFixed(2)}%</td>
+                <td><span class="pill info">${wtPct}%</span></td>
+                <td>₹${Number(a.target_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td><strong>${a.allocated_quantity}</strong></td>
+                <td><span class="pill ok">${prcPct}%</span></td>
+              </tr>`;
+            });
+            html += '</tbody></table>';
+            allocContainer.innerHTML = html;
+          }
+        }
+
+        if (stressRes && stressRes.scenarios) {
+          const baseMargin = Number(stressRes.base_margin_required_inr);
+          const baseUtil = Number(stressRes.base_utilization_pct).toFixed(2);
+          setElText('alloc-kpi-base-margin', `₹${baseMargin.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('alloc-sub-base-util', `Utilization: ${baseUtil}% of cash`);
+
+          const compUtil = Number(stressRes.composite_utilization_pct).toFixed(2);
+          const compHeadroom = Number(stressRes.composite_headroom_inr);
+          const statusBadge = stressRes.passed
+            ? '<span class="pill ok">PASS (&le; 85%)</span>'
+            : '<span class="pill alert">BREACH (&gt; 85%)</span>';
+          const utilEl = document.getElementById('alloc-kpi-stressed-util');
+          if (utilEl) utilEl.innerHTML = `${compUtil}% ${statusBadge}`;
+          setElText('alloc-sub-stressed-gate', `Stressed Headroom: ₹${compHeadroom.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+
+          const stressContainer = document.getElementById('stress-table-container');
+          if (stressContainer) {
+            let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Scenario</th><th>Description</th><th>Stressed Notional</th><th>Required Margin</th><th>Loss / Haircut</th><th>Stressed Cash</th><th>Utilization</th><th>Headroom</th><th>Status</th></tr></thead><tbody>';
+            stressRes.scenarios.forEach(s => {
+              const badge = s.breached
+                ? '<span class="pill alert">BREACH</span>'
+                : '<span class="pill ok">PASS</span>';
+              html += `<tr>
+                <td><code>${s.scenario_id}</code></td>
+                <td>${s.description}</td>
+                <td>₹${Number(s.stressed_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(s.stressed_margin_required_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td style="color:var(--red);">₹${Number(s.mark_to_market_loss_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(s.stressed_cash_available_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td><strong>${Number(s.margin_utilization_pct).toFixed(2)}%</strong></td>
+                <td>₹${Number(s.margin_headroom_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>${badge}</td>
+              </tr>`;
+            });
+            html += '</tbody></table>';
+            stressContainer.innerHTML = html;
+          }
+        }
+      } catch (e) {
+        console.error('Error refreshing allocation & stress data:', e);
       } finally {
         if (btn) {
           btn.textContent = orig;

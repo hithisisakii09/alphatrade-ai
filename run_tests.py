@@ -21,6 +21,7 @@ from tests.unit import test_regime_m19 as t_m19
 from tests.unit import test_augmented_study_m20 as t_m20
 from tests.unit import test_hyperparameter_optimizer_m21 as t_m21
 from tests.unit import test_drift_surveillance_m22 as t_m22
+from tests.unit import test_capital_allocation_m23 as t_m23
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -156,6 +157,16 @@ def run_all() -> int:
           t_m22.test_fail_safe_guard_trips_risk_engine_kill_switch,
           t_m22.test_calibrated_research_profile_configuration,
           t_m22.test_api_drift_surveillance_endpoint,
+      ]),
+      ("unit/test_capital_allocation_m23.py", [
+          t_m23.test_inverse_volatility_weights_calculation,
+          t_m23.test_equal_risk_contribution_convergence,
+          t_m23.test_weight_capping_and_redistribution,
+          t_m23.test_diversification_ratio_properties,
+          t_m23.test_pre_trade_margin_stress_scenarios,
+          t_m23.test_risk_engine_pre_trade_margin_stress_gate_rejection,
+          t_m23.test_risk_engine_pre_trade_margin_stress_gate_approval,
+          t_m23.test_m23_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,
