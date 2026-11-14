@@ -29,6 +29,7 @@ from tests.unit import test_meta_ensemble_m27 as t_m27
 from tests.unit import test_disaster_recovery_m28 as t_m28
 from tests.unit import test_compliance_m29 as t_m29
 from tests.unit import test_preflight_m30 as t_m30
+from tests.unit import test_live_gateway as t_live
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -47,6 +48,13 @@ class _MonkeyPatch:
   def setenv(self, k: str, v: str) -> None:
     import os
     os.environ[k] = v
+
+  def delenv(self, k: str, raising: bool = True) -> None:
+    import os
+    if k in os.environ:
+      del os.environ[k]
+    elif raising:
+      raise KeyError(k)
 
   def restore(self) -> None:
     import os
@@ -244,6 +252,14 @@ def run_all() -> int:
           t_m30.test_preflight_meta_ensemble_weight_normalization,
           t_m30.test_preflight_algo_slicer_validation,
           t_m30.test_m30_api_endpoints_integration,
+      ]),
+      ("unit/test_live_gateway.py", [
+          lambda: _run_with_monkeypatch(t_live.test_live_gateway_fails_closed_in_paper_mode),
+          lambda: _run_with_monkeypatch(t_live.test_live_gateway_fails_closed_without_confirmation),
+          lambda: _run_with_monkeypatch(t_live.test_live_gateway_authorized_with_proper_two_factor_env),
+          lambda: _run_with_monkeypatch(t_live.test_live_gateway_order_quantity_safety_cap),
+          lambda: _run_with_monkeypatch(t_live.test_live_gateway_mocked_order_placement_and_cancel),
+          lambda: _run_with_monkeypatch(t_live.test_smart_order_router_routes_to_live_gateway),
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

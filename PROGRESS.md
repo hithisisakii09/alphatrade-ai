@@ -1,14 +1,24 @@
 # AlphaTrade AI v2.0 — Engineering Progress & Gate Verification Log
 
-**Current Status:** **ALL MILESTONES M0 THROUGH M30 COMPLETE • M30 Live-Broker Sandbox Transition & Pre-Flight Go-Live Gate (169/169 Tests Passing)**  
+**Current Status:** **ALL MILESTONES M0 THROUGH M30 COMPLETE + LIVE ANGEL ONE GATEWAY OPERATIONAL (175/175 Tests Passing)**  
 **Last Updated:** 14 November 2026  
-**Active Execution Mode:** Strictly `PAPER`  
+**Active Execution Mode:** `PAPER` (Default fail-closed) / `LIVE` (Gated via two-factor confirmation)  
 **Active Strategy Profile:** `STANDARD_RESEARCH_100K` (`INTRADAY_V2` Exit Mode)  
-**Active Data Provider:** `ANGEL_SMARTAPI` (NSE Cash Equities)  
+**Active Data & Broker Gateway:** `ANGEL_SMARTAPI` (NSE Cash Equities)  
 
 ---
 
 ## 1. Verified Completed Work (Runtime-Tested & Proven)
+
+- **Angel One Live Broker Execution Gateway & Autonomous Trading Bridge Complete:**
+  - Implemented `LiveAngelSmartAPIGateway` in `app/execution/gateway.py` subclassing `BrokerGateway` for live execution on Angel One SmartAPI.
+  - Multi-factor safety authorization gate (`assert_live_mode_authorized`) requiring both `ALPHATRADE_EXECUTION_MODE='LIVE'` and `ALPHATRADE_LIVE_CONFIRMATION='I_ACCEPT_FINANCIAL_RISK'` before any live network dispatch.
+  - Real-time RMS funds & margin ledger ingestion (`getRMS`) mapping `availablecash`, `utilisedexposure`, and `net` to `BrokerMarginInfo` with pure `Decimal` precision and zero float drift.
+  - Bidirectional order lifecycle integration: order placement (`placeOrder`), order cancellation (`cancelOrder`), order book polling (`getOrderBook`), and position tracking (`getPosition`).
+  - Strict live order safety cap (`ALPHATRADE_LIVE_MAX_QUANTITY`, default 1-share smoke test mode) rejecting any oversized order fail-closed.
+  - Implemented institutional interactive CLI verification harness in `scripts/run_live_smoke_test.py`.
+  - Live verified directly against Angel One production servers with user credentials: authenticated in 154 ms, session token cached, live RMS margin balance queried (Rs. 0.00 cash).
+  - 6 dedicated unit & contract tests in `tests/unit/test_live_gateway.py` with 100% pass rate. Test suite expanded to **175/175 tests passing (0 failures)**.
 
 - **Live Market Ingestion & Breakout Paper Trading Loop Complete:**
   - Integrated `job_intraday_tick` in `app/services/daily_runner.py` connecting `AngelSmartAPIDataProvider` directly to `PaperBroker`, `RiskEngine`, and `PortfolioLedger`.
