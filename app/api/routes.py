@@ -1182,6 +1182,27 @@ def get_compliance_drop_copy_status(limit: int = 20):
   return stats
 
 
+# ---------------------------------------------------------------------------
+# M30 — Live-Broker Sandbox Transition & Pre-Flight Go-Live Gate
+# ---------------------------------------------------------------------------
+from app.services.preflight import PreFlightReadinessEngine
+
+_preflight_engine = PreFlightReadinessEngine()
+
+
+@router.get("/system/preflight/status")
+def get_preflight_status():
+  """M30 — Returns the latest 10-point pre-flight operational readiness audit."""
+  return _preflight_engine.get_status()
+
+
+@router.post("/system/preflight/run")
+def trigger_preflight_audit():
+  """M30 — Executes a fresh on-demand 10-point pre-flight Go/No-Go audit."""
+  report = _preflight_engine.execute_full_audit()
+  return report.to_dict()
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 @router.get("/dashboard/", response_class=HTMLResponse)

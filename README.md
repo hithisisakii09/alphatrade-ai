@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (161/161 tests passing)
+# 2. Run the unified zero-trust test suite (169/169 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -65,7 +65,10 @@ python scripts/run_disaster_recovery_replay.py
 # 19. Run the M29 Regulatory Compliance & FIX Drop-Copy CLI Harness
 python scripts/run_regulatory_audit_harness.py --events 50
 
-# 20. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 20. Run the M30 Pre-Flight Operational Readiness & Go-Live Audit CLI
+python scripts/run_preflight_readiness_audit.py
+
+# 21. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -123,4 +126,5 @@ curl http://localhost:8000/health
 - **M27 Multi-Strategy Meta-Ensemble & Dynamic Regime Allocation (`app/strategy/ensemble/`)**: Modular multi-strategy meta-allocator orchestrating three complementary alpha families: `ORBTrendStrategy` (BULL momentum), `VWAPMeanReversionStrategy` (NEUTRAL 2.0σ VWAP bands), and `PairsSpreadReversionStrategy` (BEAR/vol pairs spread z-score); dynamically computes strategy weights by weighting regime matrices with M19 HMM posterior regime probabilities ($P(\text{BULL}), P(\text{NEUTRAL}), P(\text{BEAR})$); synthesizes consensus conviction orders while systematically resolving cross-strategy directional conflicts. Results exposed via `GET /strategy/ensemble/status` and `GET /strategy/ensemble/signals`. Report in `docs/M27_MULTI_STRATEGY_META_ENSEMBLE_REPORT.md`.
 - **M28 Automated Disaster Recovery, Hot Snapshots & Intraday State Replay (`app/services/recovery.py`)**: Institutional zero-downtime disaster recovery engine featuring `HotStateSnapshotManager` with atomic JSON serialization and SHA-256 cryptographic manifests for active positions, trailing stop high-water marks, algo child orders, and shadow ledger; achieves sub-50ms state rehydration ($p_{95} \le 50.0\text{ ms}$, measured 4.4 ms); automated post-rehydration M24 `RealTimeShadowReconciler` broker parity audit; deterministic trade journal tick replayer (`IntradayTickReplayer`). Results exposed via `GET /system/recovery/status` and `POST /system/recovery/checkpoint`. Report in `docs/M28_DISASTER_RECOVERY_AND_STATE_REPLAY_REPORT.md`.
 - **M29 Regulatory Compliance, SEBI WORM Audit Logging & FIX Drop-Copy Feed (`app/compliance/`)**: SEBI-compliant WORM trade logging architecture featuring `SEBIWORMTradeLogger` with microsecond dual timestamps (UTC + IST), SEBI Annexure attributes, and cryptographic SHA-256 hash chaining; instantaneous full-chain tamper detection; simulated FIX 4.4 Drop-Copy engine (`FIXDropCopyFeed`) publishing standard ExecutionReport (`35=8`) messages with Tag 9 BodyLength and Tag 10 modulo-256 CheckSum. Results exposed via `GET /compliance/audit-trail` and `GET /compliance/drop-copy/status`. Report in `docs/M29_REGULATORY_COMPLIANCE_AND_AUDIT_TRAIL_REPORT.md`.
+- **M30 Live-Broker Sandbox Transition & Pre-Flight Go-Live Gate (`app/services/preflight.py`)**: 10-point automated Go/No-Go mission readiness audit engine validating fail-closed paper mode guard, SQLite WAL storage hygiene, broker credential authentication, 348,453 historical candle bars provenance, zero binary float drift standard, SEBI WORM cryptographic hash-chain integrity, intraday margin stress headroom (17.5% <= 85.0%), feed watchdog dead-man switch (180s), algorithmic slicer share conservation (100/100), and multi-strategy meta-ensemble weight normalization ($\sum w_i = 1.0000$). Results exposed via `GET /system/preflight/status` and `POST /system/preflight/run`. Report in `docs/M30_PREFLIGHT_READINESS_AND_SANDBOX_REPORT.md`.
 - **Verified Indian Statutory Cost Model (`app/execution/costs.py`)**: Models percentage-capped brokerage (`min(₹20, 0.03%)` per [Zerodha Charges](https://zerodha.com/charges/)), `0.025%` sell-side STT, `0.003%` buy-side stamp duty, NSE transaction charges, SEBI/IPFT turnover fees, and `18%` GST.

@@ -28,6 +28,7 @@ from tests.unit import test_streaming_m26 as t_m26
 from tests.unit import test_meta_ensemble_m27 as t_m27
 from tests.unit import test_disaster_recovery_m28 as t_m28
 from tests.unit import test_compliance_m29 as t_m29
+from tests.unit import test_preflight_m30 as t_m30
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -233,6 +234,16 @@ def run_all() -> int:
           t_m29.test_worm_log_file_persistence_and_reload,
           lambda: _run_with_monkeypatch(t_m29.test_compliance_fail_closed_paper_mode_guard),
           t_m29.test_m29_api_endpoints_integration,
+      ]),
+      ("unit/test_preflight_m30.py", [
+          t_m30.test_preflight_engine_passes_all_checks_in_standard_env,
+          lambda: _run_with_monkeypatch(t_m30.test_preflight_fails_when_live_mode_attempted),
+          t_m30.test_preflight_detects_corrupted_worm_log,
+          t_m30.test_preflight_detects_float_drift,
+          t_m30.test_preflight_margin_stress_headroom_evaluation,
+          t_m30.test_preflight_meta_ensemble_weight_normalization,
+          t_m30.test_preflight_algo_slicer_validation,
+          t_m30.test_m30_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

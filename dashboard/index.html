@@ -525,6 +525,56 @@
         </div>
       </div>
 
+      <!-- M30: Live-Broker Sandbox Transition & Pre-Flight Go-Live Gate -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Milestone M30 &mdash; Pre-Flight Operational Readiness &amp; Go-Live Audit Gate</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              10-Point Automated Mission Readiness Audit &bull; Database WAL &amp; Quick-Check &bull; Margin Stress Ceiling &bull; Hash Chaining &bull; Pure Decimal Standard
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button class="action-btn" onclick="triggerPreFlightAudit(event)" style="background:var(--red); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#9889; Run Pre-Flight Audit
+            </button>
+            <button class="action-btn" onclick="refreshPreFlightStatus(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+              &#128260; Refresh Readiness Status
+            </button>
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Pre-Flight Verdict</h3>
+            <div id="preflight-kpi-verdict" class="val" style="color:var(--green);">GO</div>
+            <div id="preflight-sub-verdict" class="sub">System Approved for Session</div>
+          </div>
+          <div class="card">
+            <h3>Passed Operational Gates</h3>
+            <div id="preflight-kpi-passed" class="val" style="color:var(--navy);">-- / 10</div>
+            <div class="sub">Zero Critical Failures Allowed</div>
+          </div>
+          <div class="card">
+            <h3>Total Audit Latency</h3>
+            <div id="preflight-kpi-latency" class="val" style="color:var(--teal);">-- ms</div>
+            <div class="sub">Target &le; 500 ms</div>
+          </div>
+          <div class="card">
+            <h3>Execution Safety Guard</h3>
+            <div id="preflight-kpi-guard" class="val" style="color:var(--green);">PAPER STRICT</div>
+            <div class="sub">assert_paper_mode() Enforced</div>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:0.5rem;">10-Point Pre-Flight Verification Checklist</h3>
+          <div id="preflight-checklist-container" style="overflow-x:auto;">
+            <p style="color:var(--muted); font-size:0.85rem;">Click Run Pre-Flight Audit to evaluate readiness...</p>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Eligible NIFTY 100 Instrument Master &amp; Token Mapping</h2>
         <table>
@@ -2611,6 +2661,65 @@
       if (e && e.target) { e.target.textContent = '\u{1F6E1} Verify Hash Chain'; e.target.disabled = false; }
     }
 
+    // 22. Pre-Flight Operational Readiness & Go-Live Gate (M30)
+    async function refreshPreFlightStatus(e) {
+      if (e && e.target) e.target.textContent = 'Loading...';
+      try {
+        const d = await fetchJson('/system/preflight/status');
+        if (!d || !d.checks) return;
+
+        const verdictEl = document.getElementById('preflight-kpi-verdict');
+        const subVerdictEl = document.getElementById('preflight-sub-verdict');
+        const passedEl = document.getElementById('preflight-kpi-passed');
+        const latEl = document.getElementById('preflight-kpi-latency');
+
+        if (verdictEl) {
+          verdictEl.textContent = d.overall_decision;
+          verdictEl.style.color = d.overall_decision === 'GO' ? 'var(--green)' : 'var(--red)';
+        }
+        if (subVerdictEl) {
+          subVerdictEl.textContent = d.overall_decision === 'GO' ? 'System Approved for Session' : 'CRITICAL GATES FAILED';
+        }
+        if (passedEl) passedEl.textContent = d.passed_count + ' / ' + d.checks.length;
+        if (latEl) latEl.textContent = d.total_latency_ms.toFixed(1) + ' ms';
+
+        const listCont = document.getElementById('preflight-checklist-container');
+        if (listCont) {
+          let html = '<table><thead><tr><th>#</th><th>Operational Gate</th><th>Status</th><th>Latency</th><th>Audit Message</th></tr></thead><tbody>';
+          d.checks.forEach((c, idx) => {
+            const pillClass = c.status === 'PASSED' ? 'ok' : c.status === 'WARNING' ? 'warn' : 'danger';
+            html += '<tr><td><code>' + (idx + 1) + '</code></td>' +
+              '<td><strong>' + c.name + '</strong></td>' +
+              '<td><span class="pill ' + pillClass + '">' + c.status + '</span></td>' +
+              '<td>' + c.latency_ms.toFixed(2) + ' ms</td>' +
+              '<td>' + c.message + '</td></tr>';
+          });
+          html += '</tbody></table>';
+          listCont.innerHTML = html;
+        }
+      } catch(err) {
+        console.error('Preflight status error:', err);
+      }
+      if (e && e.target) e.target.textContent = '\u{1F504} Refresh Readiness Status';
+    }
+
+    async function triggerPreFlightAudit(e) {
+      if (e && e.target) { e.target.textContent = 'Auditing...'; e.target.disabled = true; }
+      try {
+        const r = await fetch('/system/preflight/run', {method: 'POST'});
+        const d = await r.json();
+        alert('Pre-Flight Audit Complete!\n\nVerdict: ' + d.overall_decision +
+          '\nPassed: ' + d.passed_count + ' / ' + d.checks.length +
+          '\nWarnings: ' + d.warning_count +
+          '\nFailures: ' + d.failed_count +
+          '\nTotal Latency: ' + d.total_latency_ms.toFixed(2) + ' ms');
+        await refreshPreFlightStatus(null);
+      } catch(err) {
+        alert('Pre-flight run failed: ' + err);
+      }
+      if (e && e.target) { e.target.textContent = '\u26A1 Run Pre-Flight Audit'; e.target.disabled = false; }
+    }
+
     // Auto-refresh every 5 seconds
     setInterval(refreshAllData, 5000);
     // Initial fetch on load
@@ -2619,6 +2728,8 @@
     refreshRecoveryStatus(null);
     // M29: Initial compliance status load
     refreshComplianceTelemetry(null);
+    // M30: Initial preflight readiness load
+    refreshPreFlightStatus(null);
   </script>
 </body>
 </html>
