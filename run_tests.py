@@ -22,6 +22,7 @@ from tests.unit import test_augmented_study_m20 as t_m20
 from tests.unit import test_hyperparameter_optimizer_m21 as t_m21
 from tests.unit import test_drift_surveillance_m22 as t_m22
 from tests.unit import test_capital_allocation_m23 as t_m23
+from tests.unit import test_execution_gateway_m24 as t_m24
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -167,6 +168,16 @@ def run_all() -> int:
           t_m23.test_risk_engine_pre_trade_margin_stress_gate_rejection,
           t_m23.test_risk_engine_pre_trade_margin_stress_gate_approval,
           t_m23.test_m23_api_endpoints_integration,
+      ]),
+      ("unit/test_execution_gateway_m24.py", [
+          t_m24.test_paper_broker_gateway_order_placement,
+          t_m24.test_paper_broker_gateway_cancel_order,
+          t_m24.test_mock_angel_gateway_position_tracking,
+          t_m24.test_smart_order_router_selects_lowest_latency_gateway,
+          t_m24.test_smart_order_router_prefers_requested_gateway,
+          t_m24.test_shadow_reconciler_healthy_state,
+          t_m24.test_shadow_reconciler_detects_orphan_position_and_trips_kill_switch,
+          t_m24.test_m24_api_endpoints_integration,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

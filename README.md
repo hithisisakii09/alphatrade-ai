@@ -10,7 +10,7 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the unified zero-trust test suite (113/113 tests passing)
+# 2. Run the unified zero-trust test suite (121/121 tests passing)
 python run_tests.py
 # or: pytest -v
 
@@ -47,7 +47,10 @@ python scripts/run_multi_session_soak.py --profile CALIBRATED_RESEARCH_M21 --max
 # 13. Run the M23 Dynamic Portfolio Capital Allocation & Margin Stress Analysis
 python scripts/run_capital_allocation.py --symbols RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN --capital 100000.00
 
-# 14. Launch the live FastAPI server & dynamic 5-second polling dashboard
+# 14. Run the M24 Multi-Broker Execution Gateway Fault Injection Soak
+python scripts/run_gateway_reconciliation.py
+
+# 15. Launch the live FastAPI server & dynamic 5-second polling dashboard
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -99,4 +102,5 @@ curl http://localhost:8000/health
 - **M21 Bayesian Hyperparameter Optimizer (`app/research/optimizer.py`)**: 2-stage coarse grid and GP-UCB Bayesian optimization across 8-D strategy parameter space (opening range, RVOL, stops, trailing drops, VWAP band multiplier, HTF trend, HMM regime filter) optimizing composite risk-adjusted expectancy. Results exposed via `GET /research/hyperparameter-optimization`. Report in `docs/M21_HYPERPARAMETER_OPTIMIZATION_REPORT.md`.
 - **M22 Statistical Drift Surveillance & Multi-Session Paper Soak (`app/surveillance/drift.py`, `scripts/run_multi_session_soak.py`)**: Real-time statistical drift surveillance engine implementing exact Two-Sample Kolmogorov-Smirnov ($D, p\text{-value}$) distribution comparison and sequential CUSUM change-point degradation detection ($R_t$ tracking) with automatic fail-safe risk kill switch shutdown on `CRITICAL_DRIFT`. Automated multi-session soak harness verifying zero memory leaks via `tracemalloc`, previous-close rollover, and 100% double-entry ledger reconciliation. Results exposed via `GET /surveillance/drift`. Report in `docs/M22_PAPER_SOAK_AND_DRIFT_REPORT.md`.
 - **M23 Dynamic Portfolio Capital Allocation & Margin Stress Engine (`app/risk/allocation.py`, `app/risk/margin_stress.py`)**: Institutional Equal Risk Contribution (ERC) cyclical optimization in pure Decimal solving for equal risk contributions across multi-asset books; evaluates Diversification Ratio ($DR$); models SEBI cash intraday (MIS) peak margins with deterministic pre-trade stress testing under composite instantaneous shocks (-2.5% market gap, +50% volatility margin multiplier, and 20 bps liquidity haircut); rejects prospective signals exceeding 85% stressed margin utilization (`INTRADAY_MARGIN_STRESS_EXCEEDED`). Results exposed via `GET /risk/allocation` and `GET /risk/margin-stress`. Report in `docs/M23_CAPITAL_ALLOCATION_AND_MARGIN_STRESS_REPORT.md`.
+- **M24 Multi-Broker Execution Gateway & Shadow Reconciler (`app/execution/gateway.py`, `app/execution/shadow_reconciler.py`)**: Protocol-agnostic `BrokerGateway` interface with `PaperBrokerGateway` (in-process, 0.25 ms latency) and `MockAngelSmartAPIGateway` (REST emulation, 12.5 ms) adapters; `SmartOrderRouter` (SOR) selecting venues by latency; `RealTimeShadowReconciler` detecting ORPHAN/PHANTOM/QUANTITY discrepancies in <0.05 ms with automatic fail-closed `RiskEngine.trigger_kill_switch()` on CRITICAL variance; 4-phase fault injection soak CLI with scorecard. Results exposed via `GET /execution/gateway/status` and `GET /execution/reconciliation/status`. Report in `docs/M24_EXECUTION_GATEWAY_AND_RECONCILER_REPORT.md`.
 - **Verified Indian Statutory Cost Model (`app/execution/costs.py`)**: Models percentage-capped brokerage (`min(₹20, 0.03%)` per [Zerodha Charges](https://zerodha.com/charges/)), `0.025%` sell-side STT, `0.003%` buy-side stamp duty, NSE transaction charges, SEBI/IPFT turnover fees, and `18%` GST.

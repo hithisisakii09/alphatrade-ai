@@ -492,6 +492,59 @@
         </div>
       </div>
 
+      <!-- M24 Multi-Broker Gateway & Shadow Reconciler Card -->
+      <div class="section-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h2 style="margin:0;">Multi-Broker Execution Gateway &amp; Real-Time Shadow Reconciler (M24)</h2>
+            <p style="margin:0.25rem 0 0; font-size:0.85rem; color:var(--muted);">
+              Protocol-Agnostic Order Routing (SOR) • Sub-Millisecond Ledger Parity Auditing • Fail-Closed Discrepancy Gate
+            </p>
+          </div>
+          <button class="action-btn" onclick="refreshGatewayAndReconciler(event)" style="background:var(--navy); padding:0.4rem 0.8rem; font-size:0.82rem;">
+            ⚡ Run Shadow Audit
+          </button>
+        </div>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="card">
+            <h3>Shadow Audit State</h3>
+            <div id="recon-kpi-status" class="val"><span class="pill ok">HEALTHY</span></div>
+            <div id="recon-sub-audit-id" class="sub">0 Discrepancies Detected</div>
+          </div>
+          <div class="card">
+            <h3>Registered Gateways</h3>
+            <div id="recon-kpi-gateways" class="val">2 Venues</div>
+            <div id="recon-sub-default-gw" class="sub">Default: PAPER_INTERNAL</div>
+          </div>
+          <div class="card">
+            <h3>Position Parity</h3>
+            <div id="recon-kpi-positions" class="val">-- / --</div>
+            <div class="sub">Internal vs Broker Book</div>
+          </div>
+          <div class="card">
+            <h3>Margin Variance</h3>
+            <div id="recon-kpi-margin-var" class="val" style="color:var(--green);">₹0.00</div>
+            <div class="sub">Ledger vs Broker Margin</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Smart Order Router (SOR) Venues</h3>
+            <div id="sor-venues-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">Loading gateway status...</p>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:0.5rem;">Recent Discrepancies &amp; Fail-Safe Log</h3>
+            <div id="recon-discrepancies-container" style="overflow-x:auto;">
+              <p style="color:var(--muted); font-size:0.85rem;">No discrepancies detected.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-card">
         <h2>Executed Paper Orders &amp; Audit Log</h2>
         <table>
@@ -1205,6 +1258,9 @@
       // 15. Dynamic Capital Allocation & Margin Stress Monitor
       refreshAllocationAndStress();
 
+      // 16. Multi-Broker Gateway & Shadow Reconciler Monitor
+      refreshGatewayAndReconciler();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
     }
 
@@ -1733,6 +1789,94 @@
         }
       } catch (e) {
         console.error('Error refreshing allocation & stress data:', e);
+      } finally {
+        if (btn) {
+          btn.textContent = orig;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function refreshGatewayAndReconciler(event) {
+      const btn = event ? event.target : null;
+      let orig = '';
+      if (btn) {
+        orig = btn.textContent;
+        btn.textContent = '⏳ Auditing...';
+        btn.disabled = true;
+      }
+      try {
+        const [gwRes, reconRes] = await Promise.all([
+          fetchJson('/execution/gateway/status'),
+          fetchJson('/execution/reconciliation/status')
+        ]);
+
+        if (gwRes && gwRes.gateways) {
+          setElText('recon-kpi-gateways', `${gwRes.gateways_count} Venues`);
+          setElText('recon-sub-default-gw', `Default: ${gwRes.default_gateway}`);
+
+          const sorContainer = document.getElementById('sor-venues-container');
+          if (sorContainer) {
+            let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Gateway Name</th><th>Protocol</th><th>Status</th><th>Latency</th></tr></thead><tbody>';
+            gwRes.gateways.forEach(g => {
+              const statusPill = g.connected
+                ? '<span class="pill ok">CONNECTED</span>'
+                : '<span class="pill alert">DISCONNECTED</span>';
+              html += `<tr>
+                <td><strong>${g.name}</strong></td>
+                <td><code>${g.protocol}</code></td>
+                <td>${statusPill}</td>
+                <td>${g.latency_ms.toFixed(2)} ms</td>
+              </tr>`;
+            });
+            html += '</tbody></table>';
+            sorContainer.innerHTML = html;
+          }
+        }
+
+        if (reconRes) {
+          const statusEl = document.getElementById('recon-kpi-status');
+          if (statusEl) {
+            statusEl.innerHTML = reconRes.status === 'HEALTHY'
+              ? '<span class="pill ok">HEALTHY ✓</span>'
+              : '<span class="pill alert">DISCREPANCY DETECTED</span>';
+          }
+          setElText('recon-sub-audit-id', `${reconRes.discrepancies_count} Discrepancies • ${reconRes.audit_id}`);
+          setElText('recon-kpi-positions', `${reconRes.internal_positions_count} / ${reconRes.broker_positions_count}`);
+
+          const marginVar = Number(reconRes.margin_discrepancy_inr);
+          const marginVarEl = document.getElementById('recon-kpi-margin-var');
+          if (marginVarEl) {
+            marginVarEl.textContent = `₹${marginVar.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+            marginVarEl.style.color = marginVar > 0 ? 'var(--amber)' : 'var(--green)';
+          }
+
+          const discContainer = document.getElementById('recon-discrepancies-container');
+          if (discContainer) {
+            if (!reconRes.discrepancies || reconRes.discrepancies.length === 0) {
+              discContainer.innerHTML = '<p style="color:var(--green); font-size:0.85rem; margin-top:0.5rem;">✓ 100% State Parity between Internal Ledger and External Broker.</p>';
+            } else {
+              let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Type</th><th>Symbol</th><th>Internal</th><th>Broker</th><th>Variance</th><th>Severity</th></tr></thead><tbody>';
+              reconRes.discrepancies.forEach(d => {
+                const sevPill = d.severity === 'CRITICAL'
+                  ? '<span class="pill alert">CRITICAL</span>'
+                  : '<span class="pill warning">WARNING</span>';
+                html += `<tr>
+                  <td><code>${d.discrepancy_type}</code></td>
+                  <td><strong>${d.symbol}</strong></td>
+                  <td>${d.internal_value}</td>
+                  <td>${d.broker_value}</td>
+                  <td style="color:var(--red);">${d.variance}</td>
+                  <td>${sevPill}</td>
+                </tr>`;
+              });
+              html += '</tbody></table>';
+              discContainer.innerHTML = html;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error refreshing gateway & reconciliation data:', e);
       } finally {
         if (btn) {
           btn.textContent = orig;

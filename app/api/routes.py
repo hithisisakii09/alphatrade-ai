@@ -7,7 +7,7 @@ from fastapi import APIRouter, Response
 from fastapi.responses import HTMLResponse
 from app.core.clock import NSECalendar, to_ist
 from app.core.config import load_app_config
-from app.core.money import to_decimal
+from app.core.money import to_decimal, round_paise
 from app.core.database import (
     BacktestTradeRecord,
     DataQualityEventRecord,
@@ -18,7 +18,13 @@ from app.core.database import (
     init_db,
 )
 from app.execution.costs import NSECostEngine
+from app.execution.gateway import (
+    MockAngelSmartAPIGateway,
+    PaperBrokerGateway,
+    SmartOrderRouter,
+)
 from app.execution.impact import ExecutionAnalyticsEngine
+from app.execution.shadow_reconciler import RealTimeShadowReconciler
 from app.market.regime import VolatilityRegimeClassifier
 from app.portfolio.ledger import PortfolioLedger
 from app.reporting.analytics import compute_trade_analytics, generate_trade_journal_csv
@@ -39,6 +45,13 @@ _cfg = load_app_config()
 _engine, _SessionLocal = init_db(_cfg.database_url)
 _calendar = NSECalendar()
 _daily_runner = ScheduledDailyRunner(config=_cfg, auto_start=True)
+
+_sor = SmartOrderRouter(default_gateway="PAPER_INTERNAL")
+_paper_gw = PaperBrokerGateway(name="PAPER_INTERNAL")
+_mock_angel_gw = MockAngelSmartAPIGateway(name="ANGEL_SMARTAPI_MOCK")
+_sor.register_gateway(_paper_gw)
+_sor.register_gateway(_mock_angel_gw)
+_shadow_reconciler = RealTimeShadowReconciler(gateway=_paper_gw)
 
 
 @router.get("/health")
@@ -388,7 +401,7 @@ def get_monte_carlo_endpoint(
     ruin_drawdown_pct: float = 0.10,
     seed: int = 42,
 ):
-  from app.core.money import to_decimal
+  from app.core.money import to_decimal, round_paise
   with _SessionLocal() as db:
     pnls: list[Decimal] = []
     if source.upper() in ("LIVE", "ALL"):
@@ -414,7 +427,7 @@ def get_portfolio_var_endpoint(
     symbols: str | None = None,
     lookback_bars: int = 1500,
 ):
-  from app.core.money import to_decimal
+  from app.core.money import to_decimal, round_paise
   prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
   with _SessionLocal() as db:
     ledger = PortfolioLedger(db, prof.reference_capital)
@@ -528,6 +541,51 @@ def get_execution_impact_endpoint(
       "by_symbol": summary.by_symbol,
       "simulation": sim_breakdown,
   }
+
+
+@router.get("/execution/gateway/status")
+def get_execution_gateway_status_endpoint():
+  """
+  M24 — Multi-Broker Execution Gateway & Smart Order Router (SOR):
+  Returns registered gateways, connection status, protocols, and latency diagnostics.
+  """
+  statuses = [gw.get_status() for gw in _sor.gateways.values()]
+  return {
+      "default_gateway": _sor.default_gateway,
+      "gateways_count": len(_sor.gateways),
+      "gateways": [
+          {
+              "name": s.gateway_name,
+              "protocol": s.protocol,
+              "connected": s.connected,
+              "latency_ms": s.latency_ms,
+              "last_heartbeat_utc": s.last_heartbeat_utc.isoformat(),
+          }
+          for s in statuses
+      ],
+  }
+
+
+@router.get("/execution/reconciliation/status")
+def get_execution_reconciliation_status_endpoint():
+  """
+  M24 — Real-Time Shadow Reconciler:
+  Performs real-time state reconciliation between internal ledger and external broker books.
+  """
+  with _SessionLocal() as session:
+    open_positions = session.query(PositionRecord).filter(PositionRecord.status == "OPEN").all()
+    internal_pos_map: dict[str, tuple[int, Decimal]] = {
+        p.symbol: (p.quantity, to_decimal(p.entry_price)) for p in open_positions
+    }
+    prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+    ledger = PortfolioLedger(session, prof.reference_capital)
+    internal_margin = round_paise(ledger.get_deployed_exposure() * Decimal("0.20"))
+
+  report = _shadow_reconciler.reconcile(
+      explicit_internal_positions=internal_pos_map,
+      explicit_internal_margin=internal_margin,
+  )
+  return report.to_dict()
 
 
 @router.get("/market/regime")
