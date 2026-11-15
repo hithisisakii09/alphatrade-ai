@@ -30,6 +30,7 @@ from tests.unit import test_disaster_recovery_m28 as t_m28
 from tests.unit import test_compliance_m29 as t_m29
 from tests.unit import test_preflight_m30 as t_m30
 from tests.unit import test_live_gateway as t_live
+from tests.unit import test_nano_5k_profile as t_nano
 from tests.integration import test_broker_and_recovery as t_broker
 from tests.integration import test_daily_runner as t_runner
 from tests.integration import test_production_hardening as t_hard
@@ -260,6 +261,16 @@ def run_all() -> int:
           lambda: _run_with_monkeypatch(t_live.test_live_gateway_order_quantity_safety_cap),
           lambda: _run_with_monkeypatch(t_live.test_live_gateway_mocked_order_placement_and_cancel),
           lambda: _run_with_monkeypatch(t_live.test_smart_order_router_routes_to_live_gateway),
+      ]),
+      ("unit/test_nano_5k_profile.py", [
+          t_nano.test_nano_5k_profile_loads,
+          t_nano.test_nano_5k_stop_loss_exit_levels_tatasteel,
+          t_nano.test_nano_5k_stop_triggers_on_5pct_drop,
+          t_nano.test_nano_5k_no_exit_on_4pct_dip,
+          t_nano.test_nano_5k_risk_engine_approves_tatasteel_entry,
+          t_nano.test_nano_5k_risk_engine_rejects_on_daily_loss_limit,
+          lambda: _run_with_monkeypatch(t_nano.test_nano_5k_runner_uses_low_price_universe),
+          t_nano.test_nano_5k_profile_key_in_strategy_config,
       ]),
       ("integration/test_broker_and_recovery.py", [
           t_broker.test_idempotency_partial_fills_and_restart_recovery,

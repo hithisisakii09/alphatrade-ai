@@ -233,7 +233,7 @@ def run_100_trade_out_of_sample_study(
 ) -> WalkForwardEvaluationResult:
   """Executes an architectural stress test using synthetic benchmark vectors to verify engine invariants and monotonicity."""
   assert_paper_mode()
-  cfg = load_app_config(database_url=db_url)
+  cfg = load_app_config(database_url=db_url, risk_profile_name="STANDARD_RESEARCH_100K")
 
   target_symbols = symbols or ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "SBIN"]
   # Generate 58 trading days across 6 liquid symbols (41 days IS, 17 days OOS -> 102 OOS trades)
@@ -308,7 +308,7 @@ def run_real_historical_walk_forward(
 ) -> WalkForwardEvaluationResult:
   """Executes an authentic Walk-Forward evaluation exclusively on genuine historical candles from SQLite."""
   assert_paper_mode()
-  cfg = load_app_config(database_url=db_url)
+  cfg = load_app_config(database_url=db_url, risk_profile_name="STANDARD_RESEARCH_100K")
   _, SessionLocal = init_db(cfg.database_url)
 
   with SessionLocal() as db:

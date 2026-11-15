@@ -110,6 +110,27 @@
       "max_vwap_std_multiplier": "3.0",
       "require_regime_filter": true,
       "allowed_regimes": ["BULL", "NEUTRAL"]
+    },
+    "NANO_5K": {
+      "reference_capital": "5000.00",
+      "max_risk_per_trade_pct": "0.05",
+      "max_daily_loss_pct": "0.05",
+      "max_capital_deployed_pct": "0.80",
+      "max_single_position_pct": "0.80",
+      "max_open_positions": 1,
+      "exit_mode": "INTRADAY_V2",
+      "initial_stop_pct": "0.0500",
+      "min_stop_pct": "0.0500",
+      "max_stop_pct": "0.0500",
+      "trailing_activation_pct": "0.0300",
+      "trailing_drop_pct": "0.0150",
+      "max_cost_to_risk_ratio": "0.50",
+      "require_portfolio_var_cap": false,
+      "max_portfolio_var_95_pct": "0.025",
+      "require_participation_rate_cap": false,
+      "max_participation_rate_pct": "0.05",
+      "require_regime_filter": false,
+      "allowed_regimes": ["BULL", "NEUTRAL"]
     }
   }
 }

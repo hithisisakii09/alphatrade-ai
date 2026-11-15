@@ -103,8 +103,8 @@ def test_two_day_high_breakout_filter():
 
 def test_adaptive_atr_trailing_stop_activation():
   """Verifies that adaptive ATR trailing dynamically scales trailing activation based on volatility."""
-  cfg = load_app_config()
-  profile = cfg.strategy.risk_profiles[cfg.active_risk_profile]
+  cfg = load_app_config(risk_profile_name="STANDARD_RESEARCH_100K")
+  profile = cfg.strategy.risk_profiles["STANDARD_RESEARCH_100K"]
   cost_engine = NSECostEngine(cfg.costs[cfg.active_cost_profile])
   risk_eng = RiskEngine(profile, cost_engine)
 

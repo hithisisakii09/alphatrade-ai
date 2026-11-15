@@ -150,7 +150,7 @@ def generate_realistic_session_bars(
 
 
 def run_benchmark_simulation(db_url: str = "sqlite:///./alphatrade_v2.db") -> dict:
-  cfg = load_app_config(database_url=db_url)
+  cfg = load_app_config(database_url=db_url, risk_profile_name="STANDARD_RESEARCH_100K")
   _, SessionLocal = init_db(db_url)
   with SessionLocal() as db:
     bt = EventDrivenBacktester(db, cfg)
@@ -206,18 +206,39 @@ class ScheduledDailyRunner:
     )
     self.strategy_engine = ORBStrategyEngine(self.config.strategy, self.registry)
     self.validator = CandleIngestionValidator()
-    self.symbols_universe: list[str] = symbols_universe or [
-        "RELIANCE",
-        "TCS",
-        "INFY",
-        "HDFCBANK",
-        "ICICIBANK",
-        "SBIN",
-        "BHARTIARTL",
-        "ITC",
-        "LT",
-        "AXISBANK",
+    # NANO_5K profile targets low-price NSE stocks affordable with ₹5,000 capital.
+    # Stocks selected are typically priced below ₹300/share allowing 10–25 shares
+    # within the ₹4,000 max-deployed budget (80% of ₹5,000).
+    _NANO_5K_LOW_PRICE_SYMBOLS: list[str] = [
+        "TATASTEEL",   # ~₹140-180/share  → 22-28 shares at ₹4,000 budget
+        "NTPC",        # ~₹320-380/share  → 10-12 shares
+        "POWERGRID",   # ~₹290-320/share  → 12-13 shares
+        "TATAMOTORS",  # ~₹760-820/share  → 4-5 shares (borderline, included for liquidity)
+        "WIPRO",       # ~₹260-300/share  → 13-15 shares
+        "ITC",         # ~₹440-470/share  → 8-9 shares
     ]
+    if symbols_universe is not None:
+      self.symbols_universe = symbols_universe
+    elif self.config.active_risk_profile == "NANO_5K":
+      self.symbols_universe = _NANO_5K_LOW_PRICE_SYMBOLS
+      logger.info(
+          "NANO_5K profile active: restricting universe to %d low-price symbols: %s",
+          len(_NANO_5K_LOW_PRICE_SYMBOLS),
+          ", ".join(_NANO_5K_LOW_PRICE_SYMBOLS),
+      )
+    else:
+      self.symbols_universe = [
+          "RELIANCE",
+          "TCS",
+          "INFY",
+          "HDFCBANK",
+          "ICICIBANK",
+          "SBIN",
+          "BHARTIARTL",
+          "ITC",
+          "LT",
+          "AXISBANK",
+      ]
     self.prev_daily_closes: dict[str, Decimal] = {}
     self.candle_cache = LiveCandleCache(orb_minutes=self.config.strategy.opening_range_minutes)
     self.scheduler = BackgroundScheduler(timezone=IST, daemon=True)
