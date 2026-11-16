@@ -655,7 +655,10 @@
       </div>
 
       <div class="section-card">
-        <h2>Live Positions &amp; Trailing Peak Tracker</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+          <h2>Live Positions &amp; Trailing Peak Tracker</h2>
+          <button class="tab-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; background:#B91C1C; color:#fff; border-color:#B91C1C;" onclick="exitAllPositionsAsap()">⚡ Close All &amp; Free Margin</button>
+        </div>
         <table>
           <thead>
             <tr>
@@ -664,16 +667,17 @@
               <th>Qty</th>
               <th>Entry Price</th>
               <th>Exit Price</th>
-              <th>Initial Stop (1.25%)</th>
-              <th>Trailing Act (+2.50%)</th>
+              <th>Initial Stop</th>
+              <th>Trailing Act</th>
               <th>Trailing Peak</th>
               <th>Trailing Activated</th>
               <th>Realized P&amp;L</th>
               <th>Exit Reason</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody id="positions-tbody">
-            <tr><td colspan="11" style="text-align:center; color:var(--muted);">Loading live positions...</td></tr>
+            <tr><td colspan="12" style="text-align:center; color:var(--muted);">Loading live positions...</td></tr>
           </tbody>
         </table>
       </div>
@@ -1396,10 +1400,16 @@
                 ${Number(p.realized_pnl_inr) >= 0 ? '+' : ''}₹${Number(p.realized_pnl_inr).toFixed(2)}
               </td>
               <td><span class="pill ok">${p.exit_reason || 'IN_POSITION'}</span></td>
+              <td>
+                ${p.status === 'OPEN' 
+                  ? `<button class="tab-btn active" style="padding:0.25rem 0.55rem; font-size:0.75rem; background:#B91C1C; border-color:#B91C1C; color:#fff;" onclick="exitPositionAsap('${p.symbol}')">⚡ Sell ASAP</button>`
+                  : '<span style="color:var(--muted); font-size:0.78rem;">Settled</span>'
+                }
+              </td>
             </tr>
           `).join('');
         } else {
-          posTbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--muted);">No open or closed positions recorded yet.</td></tr>';
+          posTbody.innerHTML = '<tr><td colspan="12" style="text-align:center; color:var(--muted);">No open or closed positions recorded yet.</td></tr>';
         }
       }
 
@@ -2718,6 +2728,38 @@
         alert('Pre-flight run failed: ' + err);
       }
       if (e && e.target) { e.target.textContent = '\u26A1 Run Pre-Flight Audit'; e.target.disabled = false; }
+    }
+
+    async function exitPositionAsap(symbol) {
+      if (!confirm(`Are you sure you want to sell ${symbol} autonomously ASAP to free wallet capital for the next trade?`)) return;
+      try {
+        const r = await fetch(`/positions/${encodeURIComponent(symbol)}/exit`, {method: 'POST'});
+        const d = await r.json();
+        if (d.status === 'SUCCESS') {
+          alert(`✅ Position for ${symbol} closed autonomously!\nExit Price: ₹${d.exit_price}\nRealized P&L: ₹${d.realized_pnl_inr}\nUpdated Wallet Balance: ₹${d.new_cash_balance_inr}\n\nWallet is now freed for the next trade!`);
+          await refreshAllData();
+        } else {
+          alert(`⚠️ Notice: ${d.message || d.status}`);
+        }
+      } catch(err) {
+        alert('Exit failed: ' + err);
+      }
+    }
+
+    async function exitAllPositionsAsap() {
+      if (!confirm('Are you sure you want to autonomously close ALL open positions right now and free all margin?')) return;
+      try {
+        const r = await fetch('/positions/exit-all', {method: 'POST'});
+        const d = await r.json();
+        if (d.status === 'SUCCESS') {
+          alert(`✅ Closed ${d.total_closed} position(s) autonomously!\nAvailable Wallet Cash: ₹${d.available_cash_inr}\n\nAll funds are freed and ready for the next trade!`);
+          await refreshAllData();
+        } else {
+          alert(`⚠️ Result: ${JSON.stringify(d)}`);
+        }
+      } catch(err) {
+        alert('Close all failed: ' + err);
+      }
     }
 
     // Auto-refresh every 5 seconds

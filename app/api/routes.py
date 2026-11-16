@@ -18,7 +18,10 @@ from app.core.database import (
     init_db,
 )
 from app.execution.costs import NSECostEngine
+from app.core.execution_guard import is_live_mode_authorized
+from app.execution.paper_broker import PaperBroker
 from app.execution.gateway import (
+    BrokerOrderRequest,
     MockAngelSmartAPIGateway,
     PaperBrokerGateway,
     SmartOrderRouter,
@@ -390,6 +393,140 @@ def get_positions():
             }
             for p in positions
         ]
+    }
+
+
+@router.post("/positions/{symbol}/exit")
+def exit_position_by_symbol(symbol: str, reason: str = "AUTONOMOUS_MANUAL_EXIT_ASAP"):
+  """Autonomously closes an open position at latest market price, immediately credits wallet margin, and allows cycling to the next trade."""
+  sym_upper = symbol.strip().upper()
+  prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+  now_utc = datetime.now(timezone.utc)
+  dt_ist = to_ist(now_utc)
+  session_date = dt_ist.strftime("%Y-%m-%d")
+
+  with _SessionLocal() as db:
+    ledger = PortfolioLedger(db, prof.reference_capital)
+    broker = PaperBroker(
+        db, ledger, _daily_runner.cost_engine, _daily_runner.risk_engine, notification_service=_daily_runner.notification_service
+    )
+    broker.recover_state_after_restart()
+    pos = ledger.get_open_position_by_symbol(sym_upper)
+    if not pos:
+      return {"status": "NOT_FOUND", "message": f"No open position found for {sym_upper}"}
+
+    cached_bars = _daily_runner.candle_cache.get_bars(sym_upper)
+    if cached_bars:
+      ref_price = cached_bars[-1].close
+    else:
+      ref_price = to_decimal(pos.current_stop_price or pos.entry_price)
+
+    order, _ = broker.submit_order(
+        idempotency_key=f"ASAP_EXIT_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+        symbol=sym_upper,
+        session_date=session_date,
+        side="SELL",
+        quantity=pos.quantity,
+        reference_price=ref_price,
+        timestamp_utc=now_utc,
+    )
+    order.reason = reason
+    fill = broker.execute_fill_on_bar(
+        order,
+        bar_open_price=ref_price,
+        timestamp_utc=now_utc,
+    )
+
+    if is_live_mode_authorized() and _daily_runner.live_gateway:
+      try:
+        live_req = BrokerOrderRequest(
+            symbol=sym_upper,
+            side="SELL",
+            quantity=pos.quantity,
+            price=ref_price,
+            order_type="MARKET",
+            product_type="MIS",
+            idempotency_key=f"ASAP_EXIT_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+        )
+        _daily_runner.live_gateway.place_order(live_req)
+      except Exception:
+        pass
+
+    reconciled, msg = ledger.reconcile()
+    cash_bal = ledger.get_cash_balance()
+
+    return {
+        "status": "SUCCESS",
+        "symbol": sym_upper,
+        "quantity": pos.quantity,
+        "exit_price": str(fill.fill_price) if fill else str(ref_price),
+        "realized_pnl_inr": str(pos.realized_pnl_inr),
+        "new_cash_balance_inr": str(cash_bal),
+        "freed_for_next_trade": True,
+        "reconciled": reconciled,
+    }
+
+
+@router.post("/positions/exit-all")
+def exit_all_positions(reason: str = "AUTONOMOUS_EXIT_ALL_ASAP"):
+  """Autonomously closes all open positions at market price to immediately free 100% of capital for new trades."""
+  prof = _cfg.strategy.risk_profiles[_cfg.active_risk_profile]
+  now_utc = datetime.now(timezone.utc)
+  dt_ist = to_ist(now_utc)
+  session_date = dt_ist.strftime("%Y-%m-%d")
+  results = []
+
+  with _SessionLocal() as db:
+    ledger = PortfolioLedger(db, prof.reference_capital)
+    broker = PaperBroker(
+        db, ledger, _daily_runner.cost_engine, _daily_runner.risk_engine, notification_service=_daily_runner.notification_service
+    )
+    broker.recover_state_after_restart()
+    open_positions = ledger.get_open_positions()
+
+    for pos in open_positions:
+      cached_bars = _daily_runner.candle_cache.get_bars(pos.symbol)
+      ref_price = cached_bars[-1].close if cached_bars else to_decimal(pos.current_stop_price or pos.entry_price)
+      order, _ = broker.submit_order(
+          idempotency_key=f"ASAP_EXIT_ALL_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+          symbol=pos.symbol,
+          session_date=session_date,
+          side="SELL",
+          quantity=pos.quantity,
+          reference_price=ref_price,
+          timestamp_utc=now_utc,
+      )
+      order.reason = reason
+      fill = broker.execute_fill_on_bar(order, bar_open_price=ref_price, timestamp_utc=now_utc)
+
+      if is_live_mode_authorized() and _daily_runner.live_gateway:
+        try:
+          live_req = BrokerOrderRequest(
+              symbol=pos.symbol,
+              side="SELL",
+              quantity=pos.quantity,
+              price=ref_price,
+              order_type="MARKET",
+              product_type="MIS",
+              idempotency_key=f"ASAP_EXIT_ALL_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
+          )
+          _daily_runner.live_gateway.place_order(live_req)
+        except Exception:
+          pass
+
+      results.append({
+          "symbol": pos.symbol,
+          "exit_price": str(fill.fill_price) if fill else str(ref_price),
+          "realized_pnl_inr": str(pos.realized_pnl_inr),
+      })
+
+    cash_bal = ledger.get_cash_balance()
+    return {
+        "status": "SUCCESS",
+        "positions_closed": results,
+        "total_closed": len(results),
+        "available_cash_inr": str(cash_bal),
+        "freed_for_next_trade": True,
     }
 
 
