@@ -3332,25 +3332,16 @@
           })
         });
         const data = await resp.json();
-        if (resp.ok && data.user_id) {
-          // Registration successful, auto-login
-          const loginResp = await apiFetch('/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: emailEl.value.trim(), password: passEl.value })
-          });
-          const loginData = await loginResp.json();
-          if (loginResp.ok && loginData.access_token) {
-            localStorage.setItem('alphatrade_jwt_token', loginData.access_token);
-            localStorage.setItem('alphatrade_user_email', loginData.email);
-            localStorage.setItem('alphatrade_user_name', loginData.full_name);
-            closeAuthModal();
-            await syncAuthState();
-            refreshAllData();
-            openBrokerModal(); // Prompt to set up broker immediately
-          } else {
-            switchAuthTab('login');
+        if (resp.ok && (data.access_token || data.user_id)) {
+          if (data.access_token) {
+            localStorage.setItem('alphatrade_jwt_token', data.access_token);
+            localStorage.setItem('alphatrade_user_email', data.email);
+            localStorage.setItem('alphatrade_user_name', nameEl.value.trim());
           }
+          closeAuthModal();
+          await syncAuthState();
+          refreshAllData();
+          openBrokerModal(); // Prompt to set up broker immediately
         } else {
           if (errEl) {
             errEl.textContent = data.detail || 'Registration failed. Email may already be registered.';
@@ -3397,9 +3388,9 @@
           const creds = await resp.json();
           if (creds && creds.client_code) {
             document.getElementById('broker-client-code').value = creds.client_code;
-            document.getElementById('broker-capital').value = creds.target_capital_inr || 5000;
-            document.getElementById('broker-risk-profile').value = creds.risk_strategy_profile || 'ASYMMETRIC_25PCT_MOMENTUM';
-            document.getElementById('broker-live-consent').checked = !!creds.live_trading_consent;
+            document.getElementById('broker-capital').value = creds.reference_capital || creds.target_capital_inr || 5000;
+            document.getElementById('broker-risk-profile').value = creds.risk_profile || creds.risk_strategy_profile || 'ASYMMETRIC_25PCT_MOMENTUM';
+            document.getElementById('broker-live-consent').checked = creds.is_live_authorized !== undefined ? !!creds.is_live_authorized : !!creds.live_trading_consent;
 
             const apiKeyEl = document.getElementById('broker-api-key');
             const totpEl = document.getElementById('broker-totp');
@@ -3447,9 +3438,9 @@
 
       const payload = {
         client_code: clientCode,
-        target_capital_inr: capital,
-        risk_strategy_profile: riskProfile,
-        live_trading_consent: consent
+        reference_capital: capital,
+        risk_profile: riskProfile,
+        is_live_authorized: consent
       };
       if (apiKey) payload.api_key = apiKey;
       if (totp) payload.totp_secret = totp;
@@ -3510,9 +3501,9 @@
           api_key: apiKey,
           totp_secret: totp,
           password: pass,
-          target_capital_inr: capital,
-          risk_strategy_profile: riskProfile,
-          live_trading_consent: consent
+          reference_capital: capital,
+          risk_profile: riskProfile,
+          is_live_authorized: consent
         };
       }
 
