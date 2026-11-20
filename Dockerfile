@@ -1,48 +1,49 @@
-# AlphaTrade AI v2.0 Production Container
-FROM python:3.12-slim
+# ==============================================================================
+# AlphaTrade AI v2.0 — Production Multi-Tenant Container Image
+# ==============================================================================
 
-# Environment flags: enforce unbuffered output, IST timezone, and PAPER mode
+FROM python:3.12-slim-bookworm AS base
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=Asia/Kolkata \
-    ALPHATRADE_EXECUTION_MODE=PAPER
+    PYTHONPATH=/app \
+    TZ=Asia/Kolkata
 
-# Install system dependencies (curl for healthcheck, tzdata for IST timekeeping)
+# Install essential system utilities and timezone data
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     tzdata \
-    sqlite3 \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Create non-root system user for production hardening
-RUN useradd -u 1000 -m appuser
 
 WORKDIR /app
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install wheel
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
-# Copy application code, configuration, scripts, and dashboard
-COPY app/ app/
-COPY config/ config/
-COPY dashboard/ dashboard/
-COPY scripts/ scripts/
-COPY pyproject.toml .
+# Copy project specification and install Python dependencies
+COPY pyproject.toml README.md ./
+RUN pip install --no-cache-dir -e .
 
-# Prepare runtime directories for database, session caching, and backups
-RUN mkdir -p .cache data backups \
-    && chown -R appuser:appuser /app
+# Copy application source code, strategies, configuration, and frontend
+COPY app/ ./app/
+COPY config/ ./config/
+COPY dashboard/ ./dashboard/
 
-USER appuser
+# Create a non-root user for cloud security
+RUN useradd -m -u 1000 alphatrade && \
+    mkdir -p /app/.cache /app/data && \
+    chown -R alphatrade:alphatrade /app
 
-# Expose FastAPI port
-EXPOSE 8000
+USER alphatrade
 
-# Healthcheck targeting fail-closed health endpoint
+# Expose web service port
+EXPOSE 8080
+
+# Production Health Check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Launch ASGI server
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default entrypoint starts the FastAPI production server
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]

@@ -1,27 +1,126 @@
-version: "3.8"
+networks:
+  alphatrade-net:
+    driver: bridge
+
+volumes:
+  app_data:
+    driver: local
+  app_cache:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
 
 services:
-  alphatrade-ai:
+  # ----------------------------------------------------------------------------
+  # 1. Web API & Dashboard UI Service
+  # ----------------------------------------------------------------------------
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: alphatrade-ai
+    container_name: alphatrade-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "${PORT:-8080}:8080"
     environment:
-      - ALPHATRADE_EXECUTION_MODE=PAPER
-      - ALPHATRADE_DATABASE_URL=sqlite:////app/data/alphatrade_v2.db
-      - TZ=Asia/Kolkata
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/alphatrade_v2.db}
+      - ALPHATRADE_SECRET_KEY=${ALPHATRADE_SECRET_KEY:-ALPHATRADE_CLOUD_MASTER_KEY_2026_CHANGE_ME}
+      - ALPHATRADE_JWT_SECRET=${ALPHATRADE_JWT_SECRET:-ALPHATRADE_JWT_SECRET_KEY_CHANGE_IN_PROD}
+      - ALPHATRADE_EXECUTION_MODE=${ALPHATRADE_EXECUTION_MODE:-PAPER}
+      - ALPHATRADE_LIVE_CONFIRMATION=${ALPHATRADE_LIVE_CONFIRMATION:-}
+      - ALPHATRADE_CAPITAL_PROFILE=${ALPHATRADE_CAPITAL_PROFILE:-ASYMMETRIC_25PCT_MOMENTUM}
+      - ALPHATRADE_FNO_PAPER_ONLY=${ALPHATRADE_FNO_PAPER_ONLY:-false}
+      - ALPHATRADE_ENABLE_INTRADAY_POLLER=${ALPHATRADE_ENABLE_INTRADAY_POLLER:-true}
+      - REDIS_URL=redis://redis:6379/0
+      # Global Fallback Angel One Broker Credentials (optional per-tenant override via UI)
+      - ANGEL_API_KEY=${ANGEL_API_KEY:-}
+      - ANGEL_CLIENT_CODE=${ANGEL_CLIENT_CODE:-}
+      - ANGEL_TOTP_SECRET=${ANGEL_TOTP_SECRET:-}
+      - ANGEL_PASSWORD=${ANGEL_PASSWORD:-}
+      - ANGEL_CLIENT_PUBLIC_IP=${ANGEL_CLIENT_PUBLIC_IP:-}
     volumes:
-      - ./data:/app/data
-      - ./.cache:/app/.cache
-      - ./backups:/app/backups
+      - app_data:/app/data
+      - app_cache:/app/.cache
+    networks:
+      - alphatrade-net
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis Cache & Streaming Tick Broker
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: alphatrade-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - alphatrade-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # 3. Dedicated Background Autonomous Worker (Optional Worker Service)
+  # ----------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alphatrade-worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/alphatrade_v2.db}
+      - ALPHATRADE_SECRET_KEY=${ALPHATRADE_SECRET_KEY:-ALPHATRADE_CLOUD_MASTER_KEY_2026_CHANGE_ME}
+      - ALPHATRADE_JWT_SECRET=${ALPHATRADE_JWT_SECRET:-ALPHATRADE_JWT_SECRET_KEY_CHANGE_IN_PROD}
+      - ALPHATRADE_EXECUTION_MODE=${ALPHATRADE_EXECUTION_MODE:-PAPER}
+      - ALPHATRADE_LIVE_CONFIRMATION=${ALPHATRADE_LIVE_CONFIRMATION:-}
+      - ALPHATRADE_CAPITAL_PROFILE=${ALPHATRADE_CAPITAL_PROFILE:-ASYMMETRIC_25PCT_MOMENTUM}
+      - ALPHATRADE_FNO_PAPER_ONLY=${ALPHATRADE_FNO_PAPER_ONLY:-false}
+      - REDIS_URL=redis://redis:6379/0
+      - ANGEL_API_KEY=${ANGEL_API_KEY:-}
+      - ANGEL_CLIENT_CODE=${ANGEL_CLIENT_CODE:-}
+      - ANGEL_TOTP_SECRET=${ANGEL_TOTP_SECRET:-}
+      - ANGEL_PASSWORD=${ANGEL_PASSWORD:-}
+    volumes:
+      - app_data:/app/data
+      - app_cache:/app/.cache
+    networks:
+      - alphatrade-net
+    profiles:
+      - worker
+      - all
+    depends_on:
+      - api
+
+  # ----------------------------------------------------------------------------
+  # 4. Managed PostgreSQL Database (Optional Cloud Database Service)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: alphatrade-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alphatrade}
+      POSTGRES_USER: ${POSTGRES_USER:-alphatrade}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alphatrade_secure_pass_2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - alphatrade-net
+    profiles:
+      - cloud-postgres
+      - all
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alphatrade -d alphatrade"]
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5

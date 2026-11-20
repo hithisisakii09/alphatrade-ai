@@ -1,19 +1,41 @@
+# Git
 .git
-.github
+.gitignore
+
+# Python virtual environment & cache
 .venv
 venv
+env
 __pycache__
 *.pyc
 *.pyo
 *.pyd
+
+# Local databases & logs
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+backups/
+
+# Local cache & audit
+.cache/
+.audit/
+scratch/
+
+# Environment files & secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor files
+.vscode
+.idea
+*.swp
+
+# Testing & Coverage
 .pytest_cache
 .coverage
-htmlcov
-dist
-build
-*.egg-info
-.cache/*
-data/*
-*.db
-*.db-journal
-
+htmlcov/
+tests/
