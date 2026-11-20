@@ -190,10 +190,10 @@
   <header>
     <div>
       <h1>ALPHATRADE AI v2.0 — NSE INTRADAY ORB ENGINE</h1>
-      <p>Deterministic Quantitative Research &amp; Paper-Trading Dashboard • Read-Only Console</p>
+      <p id="dashboard-subtitle">Live Autonomous Trading Engine • Angel One SmartAPI • Real Capital Deployment</p>
     </div>
     <div class="badge-bar">
-      <span class="badge paper">EXECUTION GUARD: PAPER-ONLY</span>
+      <span id="badge-exec-guard" class="badge paper">EXECUTION GUARD: CHECKING...</span>
       <span id="badge-feed" class="badge feed">M0 FEED: ANGEL_SMARTAPI</span>
       <span id="badge-market" class="badge live-dot"><span class="pulse-dot"></span>MARKET: CONNECTED</span>
     </div>
@@ -208,6 +208,7 @@
         <button class="tab-btn" onclick="switchView('risk', this)">4. Risk &amp; Kill-Switch Monitor</button>
         <button class="tab-btn" onclick="switchView('runner', this)">5. APScheduler Runner</button>
         <button class="tab-btn" onclick="switchView('backtest', this)">6. Backtest &amp; Research</button>
+        <button class="tab-btn" onclick="switchView('options', this)">7. F&amp;O Options Engine</button>
       </div>
       <div class="sync-bar">
         <span id="sync-status">Live polling active (5s)</span>
@@ -562,8 +563,8 @@
           </div>
           <div class="card">
             <h3>Execution Safety Guard</h3>
-            <div id="preflight-kpi-guard" class="val" style="color:var(--green);">PAPER STRICT</div>
-            <div class="sub">assert_paper_mode() Enforced</div>
+            <div id="preflight-kpi-guard" class="val" style="color:var(--green);">CHECKING...</div>
+            <div id="preflight-kpi-guard-sub" class="sub">Loading execution mode...</div>
           </div>
         </div>
 
@@ -619,13 +620,13 @@
       <div class="kpi-grid">
         <div class="card">
           <h3>Starting Capital</h3>
-          <div id="kpi-starting-capital" class="val">₹1,00,000.00</div>
-          <div class="sub">Profile: STANDARD_RESEARCH_100K</div>
+          <div id="kpi-starting-capital" class="val">₹1,000.00</div>
+          <div id="sub-profile-label" class="sub">Profile: ASYMMETRIC_25PCT_MOMENTUM</div>
         </div>
         <div class="card">
           <h3>Live Cash Balance</h3>
-          <div id="kpi-cash-balance" class="val" style="color: var(--navy);">₹1,00,000.00</div>
-          <div class="sub">Available unallocated trading cash</div>
+          <div id="kpi-cash-balance" class="val" style="color: var(--navy);">₹1,000.00</div>
+          <div id="sub-cash-power" class="sub">Angel One available unallocated cash</div>
         </div>
         <div class="card">
           <h3>Realized P&amp;L (Session)</h3>
@@ -633,14 +634,14 @@
           <div class="sub">Closed positions net return</div>
         </div>
         <div class="card">
-          <h3>Deployed Exposure</h3>
+          <h3>Deployed Margin</h3>
           <div id="kpi-deployed-exposure" class="val" style="color: var(--amber);">₹0.00</div>
-          <div class="sub">Active margin in open positions</div>
+          <div class="sub">Angel One utilized margin on exchange</div>
         </div>
         <div class="card">
           <h3>Live Net Equity (MTM)</h3>
-          <div id="kpi-net-equity" class="val" style="color: var(--green);">₹1,00,000.00</div>
-          <div class="sub">Cash + Deployed + Unrealized MTM</div>
+          <div id="kpi-net-equity" class="val" style="color: var(--green);">₹1,000.00</div>
+          <div class="sub">Available Cash + Margin + Unrealized P&amp;L</div>
         </div>
         <div class="card">
           <h3>Live Candle Cache</h3>
@@ -1311,6 +1312,87 @@
         </table>
       </div>
     </section>
+
+    <!-- 7. F&O Options Engine -->
+    <section id="view-options" class="view-panel">
+      <div class="kpi-grid">
+        <div class="card">
+          <h3>F&amp;O STRATEGY <span id="opt-mode-badge" class="pill danger" style="font-size:0.65rem; background:#B91C1C; color:#fff; border:1px solid #EF4444; padding:0.15rem 0.4rem;">⚡ LIVE REAL MONEY</span></h3>
+          <div id="opt-strategy-name" class="val" style="font-size:1.1rem; color:var(--navy);">NIFTY ORB MOMENTUM</div>
+          <div id="opt-mode-sub" class="sub">Angel One Live Wallet Active • Real F&amp;O Execution</div>
+        </div>
+        <div class="card">
+          <h3>ACTIVE WEEKLY EXPIRY</h3>
+          <div id="opt-expiry" class="val" style="font-size:1.3rem; color:var(--teal);">--</div>
+          <div class="sub">Angel One NFO contract series</div>
+        </div>
+        <div class="card">
+          <h3>ORB BOUNDARIES</h3>
+          <div id="opt-orb-range" class="val" style="font-size:1.1rem;">Waiting 09:30 IST</div>
+          <div id="opt-orb-sub" class="sub">15m high/low formation</div>
+        </div>
+        <div class="card">
+          <h3>SESSION REALIZED P&amp;L</h3>
+          <div id="opt-realized-pnl" class="val" style="color:var(--teal);">+₹0.00</div>
+          <div class="sub">Capped at 2 trades / day</div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Live NIFTY Option Position &amp; Trailing Profit Ratchet</h2>
+        <div id="opt-position-container">
+          <div style="padding:1.5rem; text-align:center; color:var(--muted); font-size:0.95rem;">
+            No active option position. Scanner actively monitoring NIFTY index spot breakout.
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Asymmetric +25% Profit Target Blueprint (₹1,000 Wallet)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Trade Parameter</th>
+              <th>Specification</th>
+              <th>Financial Math</th>
+              <th>Account Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Contract Selection</strong></td>
+              <td>NIFTY Weekly 1-Strike OTM (CE/PE)</td>
+              <td>Entry Premium: ~₹8.00 - ₹14.00 (1 Lot = 65 units)</td>
+              <td>Investment: ₹520 - ₹850</td>
+            </tr>
+            <tr>
+              <td><strong>Initial Stop Loss</strong></td>
+              <td>Hard Stop: -25% of premium</td>
+              <td>Loss: -₹2.50 to -₹3.50/sh (-₹160 to -₹220 max)</td>
+              <td>Preserves 80%+ capital</td>
+            </tr>
+            <tr>
+              <td><strong>Breakeven Shift</strong></td>
+              <td>Stop moves to entry at +30% gain</td>
+              <td>Premium reaches ~₹12.00 - ₹18.00</td>
+              <td><strong>Risk eliminated (Free roll)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Target 1 (+55% Gain)</strong></td>
+              <td>+55% on premium</td>
+              <td>Gain: +₹4.50 to +₹6.00/sh (+₹290 to +₹390 net)</td>
+              <td><span class="pill ok">+29% to +39% ON ACCOUNT</span></td>
+            </tr>
+            <tr>
+              <td><strong>Runner Target (+100% Gain)</strong></td>
+              <td>+100% on premium (Trailing 10% from peak)</td>
+              <td>Gain: +₹8.00 to +₹12.00/sh (+₹520 to +₹780 net)</td>
+              <td><span class="pill ok">+52% to +78% ON ACCOUNT</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -1351,16 +1433,63 @@
     async function refreshAllData() {
       setElText('sync-status', 'Fetching data...');
 
+      // 0. Execution Mode Badge — dynamically reflect LIVE vs PAPER
+      const health = await fetchJson('/health');
+      if (health) {
+        const execBadge = document.getElementById('badge-exec-guard');
+        if (execBadge) {
+          if (health.execution_mode === 'LIVE' || health.execution_mode === 'LIVE_SANDBOX') {
+            execBadge.textContent = '⚡ EXECUTION: LIVE — ANGEL ONE (EQUITY + F&O)';
+            execBadge.style.background = '#B91C1C';
+            execBadge.style.color = '#fff';
+            execBadge.style.border = '1px solid #EF4444';
+          } else {
+            execBadge.textContent = 'EXECUTION GUARD: PAPER-ONLY';
+            execBadge.style.background = '#0F766E';
+            execBadge.style.color = '#E2F0E8';
+            execBadge.style.border = '1px solid #2DD4BF';
+          }
+        }
+        const subtitle = document.getElementById('dashboard-subtitle');
+        if (subtitle) {
+          if (health.execution_mode === 'LIVE') {
+            subtitle.textContent = 'LIVE Autonomous Trading Engine • Angel One SmartAPI • Real Capital Deployment';
+            subtitle.style.color = '#FCA5A5';
+          } else {
+            subtitle.textContent = 'Deterministic Quantitative Research & Paper-Trading Dashboard • Read-Only Console';
+            subtitle.style.color = '';
+          }
+        }
+        // Update preflight guard label
+        const guardEl = document.getElementById('preflight-kpi-guard');
+        const guardSub = document.getElementById('preflight-kpi-guard-sub');
+        if (guardEl) {
+          if (health.execution_mode === 'LIVE') {
+            guardEl.textContent = '⚡ LIVE ARMED';
+            guardEl.style.color = '#EF4444';
+            if (guardSub) guardSub.textContent = 'Two-Factor Live Authorization Active';
+          } else {
+            guardEl.textContent = 'PAPER STRICT';
+            guardEl.style.color = 'var(--green)';
+            if (guardSub) guardSub.textContent = 'assert_paper_mode() Enforced';
+          }
+        }
+      }
+
       // 1. Portfolio & Daily Report
       const portfolio = await fetchJson('/portfolio');
       if (portfolio) {
-        setElText('kpi-starting-capital', '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
-        setElText('kpi-cash-balance', '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        setElText('kpi-starting-capital', '₹' + Number(portfolio.starting_capital_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        setElText('kpi-cash-balance', '₹' + Number(portfolio.cash_balance_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        if (portfolio.mis_purchasing_power_inr) {
+          const power = Number(portfolio.mis_purchasing_power_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          setElText('sub-cash-power', `Angel One wallet • MIS 5x Power: ₹${power}`);
+        }
         if (portfolio.deployed_exposure_inr !== undefined && portfolio.deployed_exposure_inr !== null) {
-          setElText('kpi-deployed-exposure', '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+          setElText('kpi-deployed-exposure', '₹' + Number(portfolio.deployed_exposure_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
         }
         if (portfolio.net_equity_inr !== undefined && portfolio.net_equity_inr !== null) {
-          setElText('kpi-net-equity', '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+          setElText('kpi-net-equity', '₹' + Number(portfolio.net_equity_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
         }
         if (portfolio.candle_cache) {
           setElText('kpi-cache-stats', `${portfolio.candle_cache.hit_rate_pct}% Hit Rate`);
@@ -1376,7 +1505,7 @@
       if (dailyRep && dailyRep.realized_pnl_inr !== undefined && dailyRep.realized_pnl_inr !== null) {
         const pnl = Number(dailyRep.realized_pnl_inr);
         const prefix = pnl >= 0 ? '+₹' : '-₹';
-        setElText('kpi-realized-pnl', prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+        setElText('kpi-realized-pnl', prefix + Math.abs(pnl).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
         setElStyle('kpi-realized-pnl', 'color', pnl >= 0 ? 'var(--green)' : 'var(--red)');
       }
 
@@ -1620,7 +1749,98 @@
       // 19. Multi-Strategy Meta-Ensemble Monitor (M27)
       refreshEnsembleTelemetry();
 
+      // 20. F&O NIFTY Index Options Engine Monitor
+      refreshOptionsEngineData();
+
       setElText('sync-status', 'Last synced at ' + new Date().toLocaleTimeString());
+    }
+
+    async function refreshOptionsEngineData() {
+      try {
+        const opt = await fetchJson('/options/status');
+        if (!opt) return;
+
+        const badgeEl = document.getElementById('opt-mode-badge');
+        const subEl = document.getElementById('opt-mode-sub');
+        if (opt.execution_mode === 'ANGEL_LIVE_WALLET_NFO') {
+          if (badgeEl) {
+            badgeEl.textContent = '⚡ LIVE REAL MONEY';
+            badgeEl.className = 'pill danger';
+            badgeEl.style.background = '#B91C1C';
+            badgeEl.style.color = '#fff';
+            badgeEl.style.border = '1px solid #EF4444';
+          }
+          if (subEl) subEl.textContent = 'Angel One Live Wallet Active • Real F&O Execution';
+        } else {
+          if (badgeEl) {
+            badgeEl.textContent = 'PAPER ONLY';
+            badgeEl.className = 'pill ok';
+            badgeEl.style.background = '#0F766E';
+            badgeEl.style.color = '#E2F0E8';
+            badgeEl.style.border = '1px solid #2DD4BF';
+          }
+          if (subEl) subEl.textContent = 'Paper testing sandbox • Zero live wallet risk';
+        }
+
+        setElText('opt-expiry', opt.nearest_expiry || 'N/A');
+
+        if (opt.orb_formed && opt.orb_high && opt.orb_low) {
+          setElText('opt-orb-range', `H: ₹${Number(opt.orb_high).toFixed(1)} | L: ₹${Number(opt.orb_low).toFixed(1)}`);
+          setElText('opt-orb-sub', 'ORB Formed (Breakout Scanner Active)');
+        } else {
+          setElText('opt-orb-range', 'Waiting 09:30 IST');
+          setElText('opt-orb-sub', 'Forms during 09:15–09:30 IST');
+        }
+
+        const pnl = Number(opt.session_realized_pnl_inr || 0);
+        const prefix = pnl >= 0 ? '+₹' : '-₹';
+        setElText('opt-realized-pnl', prefix + Math.abs(pnl).toFixed(2));
+        setElStyle('opt-realized-pnl', 'color', pnl >= 0 ? 'var(--green)' : 'var(--red)');
+
+        const container = document.getElementById('opt-position-container');
+        if (container) {
+          if (opt.active_position) {
+            const p = opt.active_position;
+            container.innerHTML = `
+              <div style="background:#F8FAFC; border:1px solid var(--border); border-radius:8px; padding:1.2rem; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem;">
+                <div>
+                  <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase;">Contract</div>
+                  <div style="font-size:1.1rem; font-weight:700; color:var(--navy);">${p.symbol}</div>
+                  <span class="pill ${p.option_type === 'CE' ? 'ok' : 'danger'}">${p.option_type === 'CE' ? 'CALL (BULLISH)' : 'PUT (BEARISH)'}</span>
+                </div>
+                <div>
+                  <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase;">Quantity / Lot</div>
+                  <div style="font-size:1.1rem; font-weight:700;">${p.quantity} shares (1 Lot)</div>
+                  <div style="font-size:0.8rem; color:var(--muted);">Expiry: ${p.expiry}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase;">Entry Premium</div>
+                  <div style="font-size:1.1rem; font-weight:700;">₹${Number(p.entry_price).toFixed(2)}</div>
+                  <div style="font-size:0.8rem; color:var(--muted);">Peak: ₹${Number(p.highest_price).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase;">Stop Loss</div>
+                  <div style="font-size:1.1rem; font-weight:700; color:var(--red);">₹${Number(p.current_stop_price).toFixed(2)}</div>
+                  <div style="font-size:0.8rem; color:var(--muted);">${p.trailing_activated ? 'Trailing Breakeven+' : 'Hard -25%'}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase;">Target 1 (+55%)</div>
+                  <div style="font-size:1.1rem; font-weight:700; color:var(--green);">₹${Number(p.target_price_1).toFixed(2)}</div>
+                  <span class="pill ok">+₹250 Target</span>
+                </div>
+              </div>
+            `;
+          } else {
+            container.innerHTML = `
+              <div style="padding:1.5rem; text-align:center; color:var(--muted); font-size:0.95rem;">
+                No active option position. Scanner actively monitoring NIFTY index spot breakout for next trigger.
+              </div>
+            `;
+          }
+        }
+      } catch (err) {
+        console.error('Failed refreshing options engine data:', err);
+      }
     }
 
     async function refreshVaRData(event) {
@@ -1637,21 +1857,21 @@
           const m = v.metrics;
           const var95 = Number(m.var_95_inr);
           const var95Pct = (Number(m.var_95_pct) * 100).toFixed(2);
-          setElText('var-kpi-95-inr', `₹${var95.toLocaleString('en-IN', {minimumFractionDigits: 2})} (${var95Pct}%)`);
+          setElText('var-kpi-95-inr', `₹${var95.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${var95Pct}%)`);
           setElText('var-sub-95-pct', `Daily Vol: ${Number(m.portfolio_volatility_daily_pct).toFixed(2)}% • Skew: ${Number(m.portfolio_skewness).toFixed(1)}`);
 
           const cvar95 = Number(m.cvar_95_inr);
           const cvar95Pct = (Number(m.cvar_95_pct) * 100).toFixed(2);
-          setElText('var-kpi-cvar-95', `₹${cvar95.toLocaleString('en-IN', {minimumFractionDigits: 2})} (${cvar95Pct}%)`);
+          setElText('var-kpi-cvar-95', `₹${cvar95.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${cvar95Pct}%)`);
 
           const var99 = Number(m.var_99_inr);
           const cvar99 = Number(m.cvar_99_inr);
-          setElText('var-kpi-99-inr', `₹${var99.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
-          setElText('var-sub-99-cvar', `99% CVaR: ₹${cvar99.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('var-kpi-99-inr', `₹${var99.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+          setElText('var-sub-99-cvar', `99% CVaR: ₹${cvar99.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
           const divBen = Number(m.diversification_benefit_pct).toFixed(1);
           setElText('var-kpi-div-benefit', `${divBen}% Benefit`);
-          setElText('var-sub-div-undiv', `Undiversified VaR: ₹${Number(m.undiversified_var_95_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('var-sub-div-undiv', `Undiversified VaR: ₹${Number(m.undiversified_var_95_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
           const container = document.getElementById('var-matrix-container');
           if (container && v.correlation_matrix) {
@@ -1703,9 +1923,9 @@
         if (imp && imp.summary) {
           const s = imp.summary;
           setElText('impact-kpi-slippage', `${Number(s.avg_slippage_bps).toFixed(2)} bps`);
-          setElText('impact-kpi-shortfall', `₹${Number(s.total_implementation_shortfall_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('impact-kpi-shortfall', `₹${Number(s.total_implementation_shortfall_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
           setElText('impact-kpi-participation', `${Number(s.avg_participation_rate_pct).toFixed(3)}%`);
-          setElText('impact-kpi-friction', `₹${Number(s.total_fees_and_impact_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('impact-kpi-friction', `₹${Number(s.total_fees_and_impact_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
           const container = document.getElementById('impact-symbols-container');
           if (container && imp.by_symbol) {
@@ -1714,7 +1934,7 @@
               let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Symbol</th><th>Orders</th><th>Shares</th><th>Turnover (INR)</th><th>Fees</th><th>Implementation Shortfall</th><th>Avg Slippage</th></tr></thead><tbody>';
               syms.forEach(sym => {
                 const d = imp.by_symbol[sym];
-                html += `<tr><td><strong>${sym}</strong></td><td>${d.orders_count}</td><td>${d.total_shares}</td><td>₹${Number(d.total_turnover_inr).toLocaleString('en-IN', {minimumFractionDigits:2})}</td><td>₹${Number(d.total_fees_inr).toFixed(2)}</td><td style="color:${Number(d.implementation_shortfall_inr) >= 0 ? 'var(--red)' : 'var(--green)'};">₹${Number(d.implementation_shortfall_inr).toFixed(2)}</td><td><strong>${Number(d.avg_slippage_bps).toFixed(2)} bps</strong></td></tr>`;
+                html += `<tr><td><strong>${sym}</strong></td><td>${d.orders_count}</td><td>${d.total_shares}</td><td>₹${Number(d.total_turnover_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td><td>₹${Number(d.total_fees_inr).toFixed(2)}</td><td style="color:${Number(d.implementation_shortfall_inr) >= 0 ? 'var(--red)' : 'var(--green)'};">₹${Number(d.implementation_shortfall_inr).toFixed(2)}</td><td><strong>${Number(d.avg_slippage_bps).toFixed(2)} bps</strong></td></tr>`;
               });
               html += '</tbody></table>';
               container.innerHTML = html;
@@ -1994,7 +2214,7 @@
       const latestPnl = latestEq - 100000;
       const strokeColor = latestPnl >= 0 ? 'var(--teal)' : 'var(--amber)';
 
-      setElText('equity-curve-summary', `Min: ₹${minVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Max: ₹${maxVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Current: ₹${latestEq.toLocaleString('en-IN', {minimumFractionDigits:2})} (${latestPnl >= 0 ? '+' : ''}₹${latestPnl.toFixed(2)})`);
+      setElText('equity-curve-summary', `Min: ₹${minVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Max: ₹${maxVal.toLocaleString('en-IN', {maximumFractionDigits:0})} • Current: ₹${latestEq.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${latestPnl >= 0 ? '+' : ''}₹${latestPnl.toFixed(2)})`);
 
       svg.innerHTML = `
         <defs>
@@ -2081,7 +2301,7 @@
           const volDaily = Number(allocRes.portfolio_volatility_daily_pct).toFixed(2);
           const dr = Number(allocRes.diversification_ratio).toFixed(4);
           setElText('alloc-kpi-vol-dr', `${volDaily}% (DR: ${dr})`);
-          setElText('alloc-sub-vol-dr', `Allocated Notional: ₹${Number(allocRes.allocated_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('alloc-sub-vol-dr', `Allocated Notional: ₹${Number(allocRes.allocated_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
           const nAssets = allocRes.allocations.length;
           const targetPrc = nAssets > 0 ? (100 / nAssets).toFixed(2) : '0.00';
@@ -2095,10 +2315,10 @@
               const prcPct = Number(a.percentage_risk_contribution_pct).toFixed(2);
               html += `<tr>
                 <td><strong>${a.symbol}</strong></td>
-                <td>₹${Number(a.price_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(a.price_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td>${Number(a.volatility_daily_pct).toFixed(2)}%</td>
                 <td><span class="pill info">${wtPct}%</span></td>
-                <td>₹${Number(a.target_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(a.target_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td><strong>${a.allocated_quantity}</strong></td>
                 <td><span class="pill ok">${prcPct}%</span></td>
               </tr>`;
@@ -2111,7 +2331,7 @@
         if (stressRes && stressRes.scenarios) {
           const baseMargin = Number(stressRes.base_margin_required_inr);
           const baseUtil = Number(stressRes.base_utilization_pct).toFixed(2);
-          setElText('alloc-kpi-base-margin', `₹${baseMargin.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('alloc-kpi-base-margin', `₹${baseMargin.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
           setElText('alloc-sub-base-util', `Utilization: ${baseUtil}% of cash`);
 
           const compUtil = Number(stressRes.composite_utilization_pct).toFixed(2);
@@ -2121,7 +2341,7 @@
             : '<span class="pill alert">BREACH (&gt; 85%)</span>';
           const utilEl = document.getElementById('alloc-kpi-stressed-util');
           if (utilEl) utilEl.innerHTML = `${compUtil}% ${statusBadge}`;
-          setElText('alloc-sub-stressed-gate', `Stressed Headroom: ₹${compHeadroom.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+          setElText('alloc-sub-stressed-gate', `Stressed Headroom: ₹${compHeadroom.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
           const stressContainer = document.getElementById('stress-table-container');
           if (stressContainer) {
@@ -2133,12 +2353,12 @@
               html += `<tr>
                 <td><code>${s.scenario_id}</code></td>
                 <td>${s.description}</td>
-                <td>₹${Number(s.stressed_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                <td>₹${Number(s.stressed_margin_required_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                <td style="color:var(--red);">₹${Number(s.mark_to_market_loss_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
-                <td>₹${Number(s.stressed_cash_available_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(s.stressed_notional_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td>₹${Number(s.stressed_margin_required_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td style="color:var(--red);">₹${Number(s.mark_to_market_loss_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td>₹${Number(s.stressed_cash_available_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td><strong>${Number(s.margin_utilization_pct).toFixed(2)}%</strong></td>
-                <td>₹${Number(s.margin_headroom_inr).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                <td>₹${Number(s.margin_headroom_inr).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td>${badge}</td>
               </tr>`;
             });
@@ -2206,7 +2426,7 @@
           const marginVar = Number(reconRes.margin_discrepancy_inr);
           const marginVarEl = document.getElementById('recon-kpi-margin-var');
           if (marginVarEl) {
-            marginVarEl.textContent = `₹${marginVar.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+            marginVarEl.textContent = `₹${marginVar.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             marginVarEl.style.color = marginVar > 0 ? 'var(--amber)' : 'var(--green)';
           }
 

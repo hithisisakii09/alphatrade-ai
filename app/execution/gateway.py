@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -26,6 +27,8 @@ from app.core.clock import IST, to_ist
 from app.core.execution_guard import assert_live_mode_authorized, assert_paper_mode
 from app.core.money import round_paise, round_price, to_decimal
 from app.data.providers import ANGEL_SYMBOL_TOKENS, _RateLimiter, generate_totp
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,8 +41,10 @@ class BrokerOrderRequest:
   price: Decimal | None = None
   trigger_price: Decimal | None = None
   idempotency_key: str = field(default_factory=lambda: f"IDEMP_{uuid.uuid4().hex[:12]}")
-  product_type: str = "MIS"  # Cash Intraday MIS
+  product_type: str = "MIS"  # Cash Intraday MIS or NFO INTRADAY
   tag: str | None = None
+  exchange: str = "NSE"  # "NSE" or "NFO"
+  symbol_token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -442,6 +447,8 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
     self.feed_token: str | None = None
     self.refresh_token: str | None = None
     self.max_order_quantity = max_order_quantity or int(os.environ.get("ALPHATRADE_LIVE_MAX_QUANTITY", "100"))
+    self.fno_paper_mode_only = os.environ.get("ALPHATRADE_FNO_PAPER_ONLY", "true").lower() in ("true", "1", "yes")
+    self._paper_fno_orders: dict[str, BrokerOrderResponse] = {}
     self._rate_limiter = _RateLimiter(min_interval_sec=0.35)
     self._client = http_client or httpx.Client(timeout=15.0)
     self._connected = False
@@ -510,7 +517,7 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
         "X-UserType": "USER",
         "X-SourceID": "WEB",
         "X-ClientLocalIP": "127.0.0.1",
-        "X-ClientPublicIP": "106.193.147.98",
+        "X-ClientPublicIP": os.environ.get("ANGEL_CLIENT_PUBLIC_IP", "49.37.153.251"),
         "X-MACAddress": "fe80::216e:6507:4b83:30c6",
         "X-PrivateKey": self.api_key or "",
     }
@@ -534,7 +541,7 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
         "X-UserType": "USER",
         "X-SourceID": "WEB",
         "X-ClientLocalIP": "127.0.0.1",
-        "X-ClientPublicIP": "106.193.147.98",
+        "X-ClientPublicIP": os.environ.get("ANGEL_CLIENT_PUBLIC_IP", "49.37.153.251"),
         "X-MACAddress": "fe80::216e:6507:4b83:30c6",
         "X-PrivateKey": self.api_key,
     }
@@ -605,7 +612,49 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
           timestamp_utc=now,
       )
 
-    symbol_token = ANGEL_SYMBOL_TOKENS.get(request.symbol.upper())
+    is_nfo = request.exchange == "NFO" or (
+        request.symbol.upper().startswith("NIFTY") and any(x in request.symbol.upper() for x in ("CE", "PE", "FUT"))
+    )
+
+    # HYBRID ROUTING POLICY: Regular trading uses live Angel One wallet (5x MIS).
+    # F&O trading strictly executes in paper mode to preserve live capital during testing.
+    if is_nfo and self.fno_paper_mode_only:
+      paper_broker_id = f"PAPER_FNO_{uuid.uuid4().hex[:12].upper()}"
+      fill_price = request.price or Decimal("10.00")
+      logger.info(
+          "F&O HYBRID ROUTING: Preserving Angel One live wallet. Routing %s %s qty=%s to PAPER TRADING sandbox.",
+          request.side,
+          request.symbol,
+          request.quantity,
+      )
+      resp = BrokerOrderResponse(
+          broker_order_id=paper_broker_id,
+          client_order_id=request.idempotency_key,
+          symbol=request.symbol,
+          side=request.side,
+          quantity=request.quantity,
+          filled_quantity=request.quantity,
+          average_price=fill_price,
+          status="FILLED",
+          rejection_reason=None,
+          timestamp_utc=now,
+      )
+      self._paper_fno_orders[paper_broker_id] = resp
+      return resp
+
+    exchange = "NFO" if is_nfo else "NSE"
+
+    symbol_token = request.symbol_token or ANGEL_SYMBOL_TOKENS.get(request.symbol.upper())
+    if not symbol_token and is_nfo:
+      try:
+        from app.data.option_chain import AngelOptionChainResolver
+        resolver = AngelOptionChainResolver()
+        contract = resolver.get_contract_by_symbol(request.symbol)
+        if contract:
+          symbol_token = contract.token
+      except Exception as exc:
+        logger.warning("Failed resolving NFO option token for %s: %s", request.symbol, exc)
+
     if not symbol_token:
       return BrokerOrderResponse(
           broker_order_id="",
@@ -622,15 +671,21 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
 
     ordertype = "LIMIT" if (request.order_type == "LIMIT" or request.price is not None) else "MARKET"
     price_str = f"{request.price:.2f}" if request.price is not None else "0"
-    product = "INTRADAY" if request.product_type in ("MIS", "INTRADAY") else "DELIVERY"
-    tradingsymbol = f"{request.symbol.upper()}-EQ"
+    product = "INTRADAY" if request.product_type in ("MIS", "INTRADAY") else ("CARRYFORWARD" if is_nfo else "DELIVERY")
+
+    if is_nfo:
+      tradingsymbol = request.symbol.upper()
+    elif request.symbol.upper() == "TATAMOTORS":
+      tradingsymbol = "TMPV-EQ"
+    else:
+      tradingsymbol = f"{request.symbol.upper()}-EQ"
 
     payload = {
         "variety": "NORMAL",
         "tradingsymbol": tradingsymbol,
         "symboltoken": symbol_token,
         "transactiontype": request.side.upper(),
-        "exchange": "NSE",
+        "exchange": exchange,
         "ordertype": ordertype,
         "producttype": product,
         "duration": "DAY",
@@ -647,9 +702,18 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
     client = self._get_client()
     try:
       resp = client.post(self.PLACE_ORDER_URL, json=payload, headers=self._get_auth_headers())
+      # FIX: Auto-reconnect on 401 Unauthorized (expired JWT) and retry once
+      if resp.status_code == 401:
+        logger.warning("Angel One JWT expired (401). Re-authenticating with fresh TOTP and retrying order...")
+        self._connected = False
+        self.jwt_token = None
+        self.connect()
+        self._rate_limiter.wait()
+        resp = client.post(self.PLACE_ORDER_URL, json=payload, headers=self._get_auth_headers())
       resp.raise_for_status()
       data = resp.json()
     except Exception as e:
+      logger.error(f"Angel One place_order HTTP failure for {request.symbol}: {e}")
       return BrokerOrderResponse(
           broker_order_id="",
           client_order_id=request.idempotency_key,
@@ -659,12 +723,30 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
           filled_quantity=0,
           average_price=Decimal("0.00"),
           status="REJECTED",
-          rejection_reason=f"HTTP_REQUEST_FAILED_{e}",
+          rejection_reason=f"HTTP_REQUEST_FAILED: {e}",
           timestamp_utc=now,
       )
 
     if data.get("status"):
       orderid = data.get("data", {}).get("orderid", "")
+      logger.info(f"Angel One order ACCEPTED: symbol={request.symbol} side={request.side} qty={request.quantity} broker_order_id={orderid}")
+      
+      # Immediately verify if exchange / RMS rejected the order post-acceptance (e.g. Insufficient Funds)
+      if orderid:
+        try:
+          import time
+          time.sleep(0.35)
+          verif = self.get_order_status(str(orderid))
+          if verif:
+            verif.client_order_id = request.idempotency_key
+            if verif.status == "REJECTED":
+              logger.error(f"Angel One order {orderid} was REJECTED post-submission by RMS: {verif.rejection_reason}")
+              return verif
+            elif verif.status == "FILLED":
+              return verif
+        except Exception as check_exc:
+          logger.warning(f"Could not verify immediate order status for {orderid}: {check_exc}")
+
       return BrokerOrderResponse(
           broker_order_id=str(orderid),
           client_order_id=request.idempotency_key,
@@ -679,6 +761,7 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
       )
     else:
       reason = data.get("message") or data.get("errorcode") or "BROKER_REJECTED"
+      logger.error(f"Angel One order REJECTED: symbol={request.symbol} side={request.side} qty={request.quantity} reason={reason} raw={data}")
       return BrokerOrderResponse(
           broker_order_id="",
           client_order_id=request.idempotency_key,
@@ -694,6 +777,22 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
 
   def cancel_order(self, broker_order_id: str) -> bool:
     assert_live_mode_authorized()
+    if str(broker_order_id).startswith("PAPER_FNO_"):
+      if str(broker_order_id) in self._paper_fno_orders:
+        ord_resp = self._paper_fno_orders[str(broker_order_id)]
+        self._paper_fno_orders[str(broker_order_id)] = BrokerOrderResponse(
+            broker_order_id=ord_resp.broker_order_id,
+            client_order_id=ord_resp.client_order_id,
+            symbol=ord_resp.symbol,
+            side=ord_resp.side,
+            quantity=ord_resp.quantity,
+            filled_quantity=0,
+            average_price=Decimal("0.00"),
+            status="CANCELLED",
+            rejection_reason="CANCELLED_BY_USER",
+            timestamp_utc=datetime.now(timezone.utc),
+        )
+      return True
     if not self.is_connected():
       self.connect()
     payload = {
@@ -712,6 +811,8 @@ class LiveAngelSmartAPIGateway(BrokerGateway):
 
   def get_order_status(self, broker_order_id: str) -> BrokerOrderResponse | None:
     assert_live_mode_authorized()
+    if str(broker_order_id).startswith("PAPER_FNO_"):
+      return self._paper_fno_orders.get(str(broker_order_id))
     if not self.is_connected():
       self.connect()
     self._rate_limiter.wait()

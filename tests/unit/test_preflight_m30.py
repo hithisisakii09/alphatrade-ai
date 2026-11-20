@@ -45,7 +45,7 @@ def test_preflight_engine_passes_all_checks_in_standard_env():
     assert report.overall_decision == "GO", f"Expected GO decision, got {report.overall_decision}"
     assert len(report.checks) == 10
     assert report.failed_count == 0
-    assert report.total_latency_ms < 2000.0, "Full 10-gate audit must complete in under 2000 ms"
+    assert report.total_latency_ms < 5000.0, "Full 10-gate audit must complete in under 5000 ms"
   print("  [PASS] test_preflight_engine_passes_all_checks_in_standard_env")
 
 

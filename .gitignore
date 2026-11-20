@@ -43,3 +43,6 @@ backups/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Scratch and intermediate outputs
+scratch/

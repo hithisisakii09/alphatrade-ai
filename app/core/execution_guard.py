@@ -12,7 +12,9 @@ class LiveTradingUnauthorizedError(RuntimeError):
 
 
 def assert_paper_mode(mode: str | None = None) -> str:
-  """Verifies that the execution mode is strictly PAPER. Fails closed otherwise."""
+  """Verifies that the execution mode is strictly PAPER or authorized LIVE. Fails closed otherwise."""
+  if is_live_mode_authorized():
+    return assert_live_mode_authorized(mode)
   effective_mode = (mode or os.environ.get("ALPHATRADE_EXECUTION_MODE", "PAPER")).strip().upper()
   if effective_mode != "PAPER":
     raise LiveTradingProhibitedError(

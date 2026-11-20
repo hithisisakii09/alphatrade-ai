@@ -213,7 +213,7 @@ class ScheduledDailyRunner:
         "TATASTEEL",   # ~₹140-180/share  → 22-28 shares at ₹4,000 budget
         "NTPC",        # ~₹320-380/share  → 10-12 shares
         "POWERGRID",   # ~₹290-320/share  → 12-13 shares
-        "TATAMOTORS",  # ~₹760-820/share  → 4-5 shares (borderline, included for liquidity)
+        "BEL",         # ~₹280-310/share  → 12-14 shares (Nifty 50, highly liquid)
         "WIPRO",       # ~₹260-300/share  → 13-15 shares
         "ITC",         # ~₹440-470/share  → 8-9 shares
     ]
@@ -496,7 +496,7 @@ class ScheduledDailyRunner:
               "reason": "EOD_FORCED_LIQUIDATION",
           })
 
-          # If in authorized LIVE mode, dispatch liquidation order to Angel One SmartAPI
+          # FIX: Dispatch live EOD liquidation and log outcome clearly
           if is_live_mode_authorized() and self.live_gateway:
             try:
               live_liq_req = BrokerOrderRequest(
@@ -509,9 +509,21 @@ class ScheduledDailyRunner:
                   idempotency_key=f"EOD_LIQ_{pos.position_id}_{dt_ist.strftime('%H%M%S')}",
               )
               live_resp = self.live_gateway.place_order(live_liq_req)
-              logger.info(f"Live Angel One EOD Liquidation: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
+              if live_resp.status in ("ACCEPTED", "FILLED"):
+                logger.info(
+                    f"Angel One EOD liquidation CONFIRMED for {pos.symbol}: "
+                    f"broker_order_id={live_resp.broker_order_id} qty={pos.quantity}"
+                )
+              else:
+                logger.error(
+                    f"Angel One EOD liquidation REJECTED for {pos.symbol}: {live_resp.rejection_reason} "
+                    f"— position may still be open on Angel One! Check Angel One app immediately."
+                )
             except Exception as e:
-              logger.error(f"Live EOD liquidation failed for {pos.symbol}: {e}")
+              logger.error(
+                  f"Angel One EOD liquidation exception for {pos.symbol}: {e} "
+                  f"— position may still be open on Angel One! Check Angel One app immediately."
+              )
           if self.notification_service.is_configured:
             try:
               msg = self.notification_service.format_position_exit_message(
@@ -690,7 +702,7 @@ class ScheduledDailyRunner:
                     "reason": eval_res.exit_reason,
                     "exit_price": str(sell_fill.fill_price),
                 })
-                # If in authorized LIVE mode, dispatch exit order to Angel One SmartAPI
+                # FIX: Dispatch live exit order and log outcome clearly
                 if is_live_mode_authorized() and self.live_gateway:
                   try:
                     live_exit_req = BrokerOrderRequest(
@@ -703,9 +715,21 @@ class ScheduledDailyRunner:
                         idempotency_key=f"LIVE_EXIT_{open_pos.position_id}_{latest_bar.timestamp_utc.strftime('%H%M%S')}",
                     )
                     live_resp = self.live_gateway.place_order(live_exit_req)
-                    logger.info(f"Live Angel One Exit Order for {sym}: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
+                    if live_resp.status in ("ACCEPTED", "FILLED"):
+                      logger.info(
+                          f"Angel One EXIT confirmed for {sym}: broker_order_id={live_resp.broker_order_id} "
+                          f"reason={eval_res.exit_reason} price={eval_res.trigger_price}"
+                      )
+                    else:
+                      logger.error(
+                          f"Angel One EXIT REJECTED for {sym}: {live_resp.rejection_reason} "
+                          f"— position may still be open on Angel One! Manual intervention required."
+                      )
                   except Exception as e:
-                    logger.error(f"Live exit failed for {sym}: {e}")
+                    logger.error(
+                        f"Angel One EXIT exception for {sym}: {e} "
+                        f"— position may still be open on Angel One! Manual intervention required."
+                    )
               continue
 
           # 4. Opening Range Formation (09:15 - 09:30 IST)
@@ -847,6 +871,39 @@ class ScheduledDailyRunner:
                       "qty": order.requested_qty,
                   })
 
+                  # FIX: Gate the internal fill on Angel One ACCEPTANCE first (LIVE mode).
+                  # Only record the internal position if the real broker confirms the order.
+                  if is_live_mode_authorized() and self.live_gateway:
+                    live_req = BrokerOrderRequest(
+                        symbol=sym,
+                        side="BUY",
+                        quantity=risk_dec.approved_quantity,
+                        price=latest_bar.close,
+                        order_type="MARKET",
+                        product_type="MIS",
+                        idempotency_key=f"LIVE_ENTRY_{sig_eval.signal_id}",
+                    )
+                    try:
+                      live_resp = self.live_gateway.place_order(live_req)
+                    except Exception as e:
+                      logger.error(f"Live entry order exception for {sym}: {e} — skipping internal fill to avoid phantom position")
+                      trade_sig.status = "LIVE_GATEWAY_ERROR"
+                      db.commit()
+                      continue
+                    if live_resp.status not in ("ACCEPTED", "FILLED"):
+                      logger.error(
+                          f"Angel One REJECTED entry for {sym}: {live_resp.rejection_reason} "
+                          f"— skipping internal fill to avoid phantom position"
+                      )
+                      trade_sig.status = f"ANGEL_REJECTED_{live_resp.rejection_reason}"
+                      db.commit()
+                      continue
+                    logger.info(
+                        f"Angel One entry CONFIRMED for {sym}: broker_order_id={live_resp.broker_order_id} "
+                        f"qty={risk_dec.approved_quantity} price={latest_bar.close}"
+                    )
+
+                  # Angel One confirmed (or paper mode) — now record internal fill
                   fill = broker.execute_fill_on_bar(
                       order,
                       bar_open_price=latest_bar.close,
@@ -863,22 +920,11 @@ class ScheduledDailyRunner:
                         "symbol": sym,
                         "fill_price": str(fill.fill_price),
                     })
-                    # If in authorized LIVE mode, dispatch entry order to Angel One SmartAPI
-                    if is_live_mode_authorized() and self.live_gateway:
-                      try:
-                        live_req = BrokerOrderRequest(
-                            symbol=sym,
-                            side="BUY",
-                            quantity=risk_dec.approved_quantity,
-                            price=latest_bar.close,
-                            order_type="MARKET",
-                            product_type="MIS",
-                            idempotency_key=f"LIVE_ENTRY_{sig_eval.signal_id}",
-                        )
-                        live_resp = self.live_gateway.place_order(live_req)
-                        logger.info(f"Live Angel One Entry Order for {sym}: status={live_resp.status}, broker_id={live_resp.broker_order_id}")
-                      except Exception as e:
-                        logger.error(f"Live entry failed for {sym}: {e}")
+                    if is_live_mode_authorized():
+                      logger.info(
+                          f"Internal ledger updated for LIVE position: {sym} "
+                          f"qty={fill.fill_quantity} @ {fill.fill_price}"
+                      )
                 else:
                   trade_sig.status = f"REJECTED_{risk_dec.reason_code}"
                 db.commit()

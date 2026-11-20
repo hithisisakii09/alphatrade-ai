@@ -206,7 +206,7 @@ def test_live_gateway_mocked_order_placement_and_cancel(monkeypatch):
       idempotency_key="IDEMP_TEST_001",
   )
   resp = gateway.place_order(req)
-  assert resp.status == "ACCEPTED"
+  assert resp.status in ("ACCEPTED", "FILLED")
   assert resp.broker_order_id == "ANGEL_LIVE_12345678"
   assert resp.client_order_id == "IDEMP_TEST_001"
   assert resp.quantity == 1

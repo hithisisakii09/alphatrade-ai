@@ -78,6 +78,7 @@ ANGEL_SYMBOL_TOKENS: dict[str, str] = {
     "HCLTECH": "7229",
     "ASIANPAINT": "236",
     "ULTRACEMCO": "11532",
+    "BEL": "383",
 }
 
 
@@ -207,7 +208,7 @@ class AngelSmartAPIDataProvider:
         "X-UserType": "USER",
         "X-SourceID": "WEB",
         "X-ClientLocalIP": "127.0.0.1",
-        "X-ClientPublicIP": "106.193.147.98",
+        "X-ClientPublicIP": os.environ.get("ANGEL_CLIENT_PUBLIC_IP", "49.37.153.251"),
         "X-MACAddress": "fe80::216e:6507:4b83:30c6",
         "X-PrivateKey": self.api_key,
     }
@@ -293,7 +294,7 @@ class AngelSmartAPIDataProvider:
         "X-UserType": "USER",
         "X-SourceID": "WEB",
         "X-ClientLocalIP": "127.0.0.1",
-        "X-ClientPublicIP": "106.193.147.98",
+        "X-ClientPublicIP": os.environ.get("ANGEL_CLIENT_PUBLIC_IP", "49.37.153.251"),
         "X-MACAddress": "fe80::216e:6507:4b83:30c6",
         "X-PrivateKey": self.api_key or "",
         "Authorization": auth_header,

@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import os
 import sqlite3
+import threading
 from typing import Any, Type, TypeVar
+
+_db_lock = threading.RLock()
 
 T = TypeVar("T")
 
@@ -401,53 +404,54 @@ class QueryProxy:
     return self
 
   def all(self) -> list[Any]:
-    self.session.flush()
+    with _db_lock:
+      self.session.flush()
 
-    tbl = self.model_cls.__tablename__
-    schema = self.session.schema.get(tbl, {})
+      tbl = self.model_cls.__tablename__
+      schema = self.session.schema.get(tbl, {})
 
-    clauses: list[str] = []
-    params: list[Any] = []
-    for col, val in self.filters:
-      if val is None:
-        clauses.append(f"[{col}] IS NULL")
-      else:
-        clauses.append(f"[{col}] = ?")
-        params.append(_serialize_value(val))
+      clauses: list[str] = []
+      params: list[Any] = []
+      for col, val in self.filters:
+        if val is None:
+          clauses.append(f"[{col}] IS NULL")
+        else:
+          clauses.append(f"[{col}] = ?")
+          params.append(_serialize_value(val))
 
-    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    order_sql = f" ORDER BY [{self.order[0]}] {self.order[1]}" if self.order else ""
-    limit_sql = f" LIMIT {int(self._limit)}" if self._limit is not None else ""
+      where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+      order_sql = f" ORDER BY [{self.order[0]}] {self.order[1]}" if self.order else ""
+      limit_sql = f" LIMIT {int(self._limit)}" if self._limit is not None else ""
 
-    sql = f"SELECT * FROM [{tbl}]{where_sql}{order_sql}{limit_sql}"
+      sql = f"SELECT * FROM [{tbl}]{where_sql}{order_sql}{limit_sql}"
 
-    cur = self.session.conn.cursor()
-    rows = cur.execute(sql, params).fetchall()
+      cur = self.session.conn.cursor()
+      rows = cur.execute(sql, params).fetchall()
 
-    results: list[Any] = []
-    col_names = [d[0] for d in cur.description] if cur.description else []
-    for row in rows:
-      row_dict: dict[str, Any] = {}
-      for idx, col_name in enumerate(col_names):
-        val = row[idx]
-        ctype = schema.get(col_name, "TEXT")
-        row_dict[col_name] = _deserialize_value(val, ctype)
+      results: list[Any] = []
+      col_names = [d[0] for d in cur.description] if cur.description else []
+      for row in rows:
+        row_dict: dict[str, Any] = {}
+        for idx, col_name in enumerate(col_names):
+          val = row[idx]
+          ctype = schema.get(col_name, "TEXT")
+          row_dict[col_name] = _deserialize_value(val, ctype)
 
-      row_id = row_dict.get("id")
-      obj_key = (self.model_cls, row_id)
+        row_id = row_dict.get("id")
+        obj_key = (self.model_cls, row_id)
 
-      if obj_key in self.session._identity_map:
-        tracked_obj = self.session._identity_map[obj_key]
-        results.append(tracked_obj)
-      else:
-        obj = self.model_cls(**row_dict)
-        self.session._identity_map[obj_key] = obj
-        self.session._snapshot[obj_key] = {
-            col: getattr(obj, col, None) for col in schema.keys() if hasattr(obj, col)
-        }
-        results.append(obj)
+        if obj_key in self.session._identity_map:
+          tracked_obj = self.session._identity_map[obj_key]
+          results.append(tracked_obj)
+        else:
+          obj = self.model_cls(**row_dict)
+          self.session._identity_map[obj_key] = obj
+          self.session._snapshot[obj_key] = {
+              col: getattr(obj, col, None) for col in schema.keys() if hasattr(obj, col)
+          }
+          results.append(obj)
 
-    return results
+      return results
 
   def first(self) -> Any | None:
     old_limit = self._limit
@@ -487,83 +491,86 @@ class Session:
     return QueryProxy(self, model_cls)
 
   def flush(self) -> None:
-    cur = self.conn.cursor()
+    with _db_lock:
+      cur = self.conn.cursor()
 
-    # 1. Process pending inserts
-    inserts_to_process = list(self._pending_inserts)
-    self._pending_inserts.clear()
+      # 1. Process pending inserts
+      inserts_to_process = list(self._pending_inserts)
+      self._pending_inserts.clear()
 
-    for obj in inserts_to_process:
-      tbl = obj.__tablename__
-      table_schema = self.schema.get(tbl, {})
-      cols: list[str] = []
-      vals: list[Any] = []
+      for obj in inserts_to_process:
+        tbl = obj.__tablename__
+        table_schema = self.schema.get(tbl, {})
+        cols: list[str] = []
+        vals: list[Any] = []
 
-      for col_name in table_schema.keys():
-        if col_name == "id":
-          if getattr(obj, "id", None) is not None:
+        for col_name in table_schema.keys():
+          if col_name == "id":
+            if getattr(obj, "id", None) is not None:
+              cols.append(f"[{col_name}]")
+              vals.append(obj.id)
+            continue
+          if hasattr(obj, col_name):
             cols.append(f"[{col_name}]")
-            vals.append(obj.id)
+            vals.append(_serialize_value(getattr(obj, col_name)))
+
+        if cols:
+          col_str = ", ".join(cols)
+          placeholder_str = ", ".join(["?"] * len(vals))
+          cur.execute(f"INSERT INTO [{tbl}] ({col_str}) VALUES ({placeholder_str})", vals)
+          if getattr(obj, "id", None) is None:
+            obj.id = cur.lastrowid
+
+        obj_key = (type(obj), obj.id)
+        self._identity_map[obj_key] = obj
+        self._snapshot[obj_key] = {
+            col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
+        }
+
+      # 2. Process updates for mutable tracked instances in identity map
+      mutable_models = (PositionRecord, OrderRecord, BacktestRunRecord)
+      for (model_cls, obj_id), obj in list(self._identity_map.items()):
+        if not issubclass(model_cls, mutable_models):
           continue
-        if hasattr(obj, col_name):
-          cols.append(f"[{col_name}]")
-          vals.append(_serialize_value(getattr(obj, col_name)))
+        tbl = obj.__tablename__
+        table_schema = self.schema.get(tbl, {})
+        snapshot = self._snapshot.get((model_cls, obj_id), {})
 
-      if cols:
-        col_str = ", ".join(cols)
-        placeholder_str = ", ".join(["?"] * len(vals))
-        cur.execute(f"INSERT INTO [{tbl}] ({col_str}) VALUES ({placeholder_str})", vals)
-        if getattr(obj, "id", None) is None:
-          obj.id = cur.lastrowid
-
-      obj_key = (type(obj), obj.id)
-      self._identity_map[obj_key] = obj
-      self._snapshot[obj_key] = {
-          col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
-      }
-
-    # 2. Process updates for mutable tracked instances in identity map
-    mutable_models = (PositionRecord, OrderRecord, BacktestRunRecord)
-    for (model_cls, obj_id), obj in list(self._identity_map.items()):
-      if not issubclass(model_cls, mutable_models):
-        continue
-      tbl = obj.__tablename__
-      table_schema = self.schema.get(tbl, {})
-      snapshot = self._snapshot.get((model_cls, obj_id), {})
-
-      dirty = False
-      for col_name in table_schema.keys():
-        if col_name == "id":
-          continue
-        if getattr(obj, col_name, None) != snapshot.get(col_name):
-          dirty = True
-          break
-
-      if dirty:
-        update_cols: list[str] = []
-        update_vals: list[Any] = []
+        dirty = False
         for col_name in table_schema.keys():
           if col_name == "id":
             continue
-          if hasattr(obj, col_name):
-            update_cols.append(f"[{col_name}] = ?")
-            update_vals.append(_serialize_value(getattr(obj, col_name, None)))
+          if getattr(obj, col_name, None) != snapshot.get(col_name):
+            dirty = True
+            break
 
-        if update_cols:
-          update_vals.append(obj.id)
-          sql = f"UPDATE [{tbl}] SET {', '.join(update_cols)} WHERE [id] = ?"
-          cur.execute(sql, update_vals)
-          self._snapshot[(model_cls, obj_id)] = {
-              col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
-          }
+        if dirty:
+          update_cols: list[str] = []
+          update_vals: list[Any] = []
+          for col_name in table_schema.keys():
+            if col_name == "id":
+              continue
+            if hasattr(obj, col_name):
+              update_cols.append(f"[{col_name}] = ?")
+              update_vals.append(_serialize_value(getattr(obj, col_name, None)))
+
+          if update_cols:
+            update_vals.append(obj.id)
+            sql = f"UPDATE [{tbl}] SET {', '.join(update_cols)} WHERE [id] = ?"
+            cur.execute(sql, update_vals)
+            self._snapshot[(model_cls, obj_id)] = {
+                col: getattr(obj, col, None) for col in table_schema.keys() if hasattr(obj, col)
+            }
 
   def commit(self) -> None:
-    self.flush()
-    self.conn.commit()
+    with _db_lock:
+      self.flush()
+      self.conn.commit()
 
   def rollback(self) -> None:
-    self._pending_inserts.clear()
-    self.conn.rollback()
+    with _db_lock:
+      self._pending_inserts.clear()
+      self.conn.rollback()
 
 
 def init_db(database_url: str = "sqlite:///:memory:"):
