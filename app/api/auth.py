@@ -327,3 +327,51 @@ def delete_broker_credentials(current_user: Annotated[UserRecord, Depends(get_cu
       cur.execute("DELETE FROM user_broker_credentials WHERE user_id = ?", (user_id,))
       session.commit()
   return {"status": "SUCCESS", "message": "Broker credentials removed."}
+
+
+@router.post("/broker-credentials/test")
+def test_broker_connectivity(
+    current_user: Annotated[UserRecord, Depends(get_current_user)],
+    payload: BrokerCredentialCreateRequest | None = None,
+):
+  """Tests live connectivity to Angel One SmartAPI using provided or stored credentials."""
+  user_id = getattr(current_user, "user_id")
+  api_key = payload.api_key if payload else None
+  client_code = payload.client_code if payload else None
+  totp_secret = payload.totp_secret if payload else None
+  password = payload.password if payload else None
+
+  if not api_key:
+    with _db_lock:
+      with _SessionLocal() as session:
+        cred = session.query(UserBrokerCredentialRecord).filter(
+            UserBrokerCredentialRecord.user_id == user_id
+        ).first()
+        if not cred:
+          raise HTTPException(status_code=400, detail="No broker credentials configured to test.")
+        api_key = decrypt_secret(getattr(cred, "encrypted_api_key"))
+        client_code = getattr(cred, "client_code")
+        totp_secret = decrypt_secret(getattr(cred, "encrypted_totp_secret"))
+        password = decrypt_secret(getattr(cred, "encrypted_password"))
+
+  from app.execution.gateway import LiveAngelSmartAPIGateway
+  try:
+    gw = LiveAngelSmartAPIGateway(
+        api_key=api_key,
+        client_code=client_code,
+        totp_secret=totp_secret,
+        password=password,
+    )
+    rms = gw.get_margins()
+    return {
+        "status": "SUCCESS",
+        "message": f"Successfully authenticated with Angel One SmartAPI for client {client_code}",
+        "client_code": client_code,
+        "available_cash_inr": str(rms.available_cash),
+        "total_equity_inr": str(rms.total_equity),
+    }
+  except Exception as e:
+    return {
+        "status": "FAILED",
+        "message": f"Angel One authentication failed: {e}",
+    }

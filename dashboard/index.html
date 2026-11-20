@@ -184,6 +184,119 @@
     .pill.ok { background: var(--green-bg); color: var(--green); }
     .pill.warn { background: var(--amber-bg); color: var(--amber); }
     .pill.danger { background: var(--red-bg); color: var(--red); }
+
+    /* --- Multi-Tenant Auth & Broker Setup Modals --- */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-box {
+      background: #FFFFFF;
+      border-radius: 12px;
+      width: 92%;
+      max-width: 520px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: translateY(-16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .modal-header {
+      background: var(--navy);
+      color: #fff;
+      padding: 1.1rem 1.4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 { font-size: 1.1rem; font-weight: 700; color: #fff; margin: 0; }
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 1.3rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close-btn:hover { color: #fff; }
+    .modal-body { padding: 1.4rem; max-height: 75vh; overflow-y: auto; }
+    .auth-tab-bar {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 1.25rem;
+    }
+    .auth-tab-btn {
+      padding: 0.5rem 1rem;
+      border: none;
+      background: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+    }
+    .auth-tab-btn.active {
+      color: var(--navy);
+      border-bottom-color: var(--teal);
+    }
+    .form-group { margin-bottom: 0.9rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 0.3rem;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 2px rgba(40,114,113,0.15);
+    }
+    .form-group .help-text {
+      font-size: 0.73rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      background: var(--navy);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: background 0.2s;
+    }
+    .btn-submit:hover { background: #0F2335; }
+    .btn-secondary {
+      background: #F1F5F9;
+      color: var(--navy);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #E2E8F0; }
   </style>
 </head>
 <body>
@@ -196,6 +309,15 @@
       <span id="badge-exec-guard" class="badge paper">EXECUTION GUARD: CHECKING...</span>
       <span id="badge-feed" class="badge feed">M0 FEED: ANGEL_SMARTAPI</span>
       <span id="badge-market" class="badge live-dot"><span class="pulse-dot"></span>MARKET: CONNECTED</span>
+      <!-- Multi-Tenant Auth Header Area -->
+      <div id="user-header-box" style="display:flex; align-items:center; gap:0.5rem; margin-left:0.5rem; border-left:1px solid rgba(255,255,255,0.25); padding-left:0.6rem;">
+        <button id="btn-user-login" class="badge" style="background:#2563EB; cursor:pointer; border:none; padding:0.35rem 0.75rem;" onclick="openAuthModal('login')">🔑 Sign In</button>
+        <div id="user-profile-badge" style="display:none; align-items:center; gap:0.5rem;">
+          <span id="user-email-label" style="font-size:0.78rem; color:#E2E8F0; font-weight:600;">trader@domain.com</span>
+          <button id="btn-broker-badge" class="badge" style="background:#0F766E; cursor:pointer; border:1px solid #2DD4BF;" onclick="openBrokerModal()">⚙️ Connect Broker</button>
+          <button id="btn-user-logout" class="badge" style="background:#7F1D1D; cursor:pointer; border:none; padding:0.35rem 0.6rem;" onclick="handleUserLogout()">Logout</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -1394,6 +1516,119 @@
       </div>
     </section>
   </main>
+
+  <!-- Auth Modal (Sign In / Register) -->
+  <div id="auth-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="auth-modal-title">Trader Authentication</h3>
+        <button class="modal-close-btn" onclick="closeAuthModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="auth-tab-bar">
+          <button id="tab-auth-login" class="auth-tab-btn active" onclick="switchAuthTab('login')">Sign In</button>
+          <button id="tab-auth-register" class="auth-tab-btn" onclick="switchAuthTab('register')">Create Account</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="form-login" onsubmit="handleUserLogin(event)">
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="login-email" required placeholder="trader@domain.com" />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="login-password" required placeholder="••••••••" />
+          </div>
+          <div id="login-error-msg" style="color:var(--red); font-size:0.8rem; margin-bottom:0.5rem; display:none;"></div>
+          <button type="submit" class="btn-submit">🔑 Sign In to Console</button>
+        </form>
+
+        <!-- Register Form -->
+        <form id="form-register" style="display:none;" onsubmit="handleUserRegister(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="reg-name" required placeholder="e.g. Rahul Sharma" />
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="reg-email" required placeholder="trader@domain.com" />
+          </div>
+          <div class="form-group">
+            <label>Password (Min 8 Characters)</label>
+            <input type="password" id="reg-password" minlength="8" required placeholder="••••••••" />
+          </div>
+          <div id="reg-error-msg" style="color:var(--red); font-size:0.8rem; margin-bottom:0.5rem; display:none;"></div>
+          <button type="submit" class="btn-submit">✨ Create Cloud Trading Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Broker Setup Modal (Angel One SmartAPI) -->
+  <div id="broker-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Connect Angel One SmartAPI</h3>
+        <button class="modal-close-btn" onclick="closeBrokerModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.82rem; color:var(--muted); margin-bottom:1rem;">
+          Credentials are encrypted at rest with <strong>AES-256 Fernet</strong>. AlphaTrade AI will use these details to authenticate your automated trading session.
+        </p>
+
+        <form id="form-broker" onsubmit="saveBrokerCredentials(event)">
+          <div class="form-group">
+            <label>Client Code / User ID</label>
+            <input type="text" id="broker-client-code" required placeholder="e.g. S54949978" />
+            <div class="help-text">Your Angel One trading account login ID.</div>
+          </div>
+          <div class="form-group">
+            <label>SmartAPI Key</label>
+            <input type="password" id="broker-api-key" required placeholder="SmartAPI Developer Key" />
+            <div class="help-text">Generated from smartapi.angelone.in portal.</div>
+          </div>
+          <div class="form-group">
+            <label>2FA TOTP Secret Key (Base32)</label>
+            <input type="password" id="broker-totp" required placeholder="e.g. PQQNAFSM44DJQV2HFVF33LBCPQ" />
+            <div class="help-text">Secret key used to generate your 6-digit TOTP.</div>
+          </div>
+          <div class="form-group">
+            <label>Trading PIN / Password</label>
+            <input type="password" id="broker-password" required placeholder="Trading Password or 4-digit PIN" />
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label>Target Trading Capital (₹)</label>
+              <input type="number" id="broker-capital" min="1000" step="500" value="5000" required />
+            </div>
+            <div class="form-group">
+              <label>Risk Strategy Profile</label>
+              <select id="broker-risk-profile">
+                <option value="ASYMMETRIC_25PCT_MOMENTUM" selected>25% Asymmetric Momentum</option>
+                <option value="CONSERVATIVE">Conservative ORB</option>
+                <option value="NANO_5K">Nano 5K Capital</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex; align-items:flex-start; gap:0.5rem; margin-top:0.25rem;">
+            <input type="checkbox" id="broker-live-consent" style="width:auto; margin-top:0.2rem;" />
+            <label for="broker-live-consent" style="font-size:0.78rem; font-weight:normal; color:var(--text); cursor:pointer;">
+              I authorize live order routing and accept financial risk on my Angel One account.
+            </label>
+          </div>
+
+          <div id="broker-status-msg" style="padding:0.5rem; font-size:0.8rem; border-radius:4px; margin-bottom:0.75rem; display:none;"></div>
+
+          <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+            <button type="button" class="btn-submit btn-secondary" style="flex:1;" onclick="testBrokerCredentials()">🔌 Test Login</button>
+            <button type="submit" class="btn-submit" style="flex:2;">💾 Save &amp; Connect Account</button>
+          </div>
+          <button type="button" id="btn-disconnect-broker" class="btn-submit" style="background:#B91C1C; margin-top:0.5rem; display:none;" onclick="deleteBrokerCredentials()">Disconnect Account</button>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <script>
     function setElText(id, text) {
@@ -3005,10 +3240,391 @@
       }
     }
 
+    /* --- Multi-Tenant Auth & Angel One Broker Setup JS Logic --- */
+    function openAuthModal(tab) {
+      switchAuthTab(tab || 'login');
+      const modal = document.getElementById('auth-modal');
+      if (modal) modal.classList.add('active');
+    }
+
+    function closeAuthModal() {
+      const modal = document.getElementById('auth-modal');
+      if (modal) modal.classList.remove('active');
+      const loginErr = document.getElementById('login-error-msg');
+      if (loginErr) loginErr.style.display = 'none';
+      const regErr = document.getElementById('reg-error-msg');
+      if (regErr) regErr.style.display = 'none';
+    }
+
+    function switchAuthTab(tab) {
+      const btnLogin = document.getElementById('btn-auth-tab-login');
+      const btnReg = document.getElementById('btn-auth-tab-register');
+      const formLogin = document.getElementById('form-login');
+      const formReg = document.getElementById('form-register');
+      const title = document.getElementById('auth-modal-title');
+
+      if (tab === 'register') {
+        if (btnLogin) btnLogin.classList.remove('active');
+        if (btnReg) btnReg.classList.add('active');
+        if (formLogin) formLogin.style.display = 'none';
+        if (formReg) formReg.style.display = 'block';
+        if (title) title.textContent = 'Create AlphaTrade AI Account';
+      } else {
+        if (btnLogin) btnLogin.classList.add('active');
+        if (btnReg) btnReg.classList.remove('active');
+        if (formLogin) formLogin.style.display = 'block';
+        if (formReg) formReg.style.display = 'none';
+        if (title) title.textContent = 'Sign In to AlphaTrade AI';
+      }
+    }
+
+    async function handleUserLogin(e) {
+      e.preventDefault();
+      const emailEl = document.getElementById('login-email');
+      const passEl = document.getElementById('login-password');
+      const errEl = document.getElementById('login-error-msg');
+      if (errEl) errEl.style.display = 'none';
+
+      try {
+        const resp = await apiFetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailEl.value.trim(), password: passEl.value })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.access_token) {
+          localStorage.setItem('alphatrade_jwt_token', data.access_token);
+          localStorage.setItem('alphatrade_user_email', data.email);
+          localStorage.setItem('alphatrade_user_name', data.full_name);
+          closeAuthModal();
+          await syncAuthState();
+          refreshAllData();
+        } else {
+          if (errEl) {
+            errEl.textContent = data.detail || 'Login failed. Please check your credentials.';
+            errEl.style.display = 'block';
+          }
+        }
+      } catch (err) {
+        if (errEl) {
+          errEl.textContent = 'Network or server error: ' + err.message;
+          errEl.style.display = 'block';
+        }
+      }
+    }
+
+    async function handleUserRegister(e) {
+      e.preventDefault();
+      const nameEl = document.getElementById('reg-name');
+      const emailEl = document.getElementById('reg-email');
+      const passEl = document.getElementById('reg-password');
+      const errEl = document.getElementById('reg-error-msg');
+      if (errEl) errEl.style.display = 'none';
+
+      try {
+        const resp = await apiFetch('/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: nameEl.value.trim(),
+            email: emailEl.value.trim(),
+            password: passEl.value
+          })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.user_id) {
+          // Registration successful, auto-login
+          const loginResp = await apiFetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailEl.value.trim(), password: passEl.value })
+          });
+          const loginData = await loginResp.json();
+          if (loginResp.ok && loginData.access_token) {
+            localStorage.setItem('alphatrade_jwt_token', loginData.access_token);
+            localStorage.setItem('alphatrade_user_email', loginData.email);
+            localStorage.setItem('alphatrade_user_name', loginData.full_name);
+            closeAuthModal();
+            await syncAuthState();
+            refreshAllData();
+            openBrokerModal(); // Prompt to set up broker immediately
+          } else {
+            switchAuthTab('login');
+          }
+        } else {
+          if (errEl) {
+            errEl.textContent = data.detail || 'Registration failed. Email may already be registered.';
+            errEl.style.display = 'block';
+          }
+        }
+      } catch (err) {
+        if (errEl) {
+          errEl.textContent = 'Network or server error: ' + err.message;
+          errEl.style.display = 'block';
+        }
+      }
+    }
+
+    function handleUserLogout() {
+      if (!confirm('Log out from your AlphaTrade cloud session?')) return;
+      localStorage.removeItem('alphatrade_jwt_token');
+      localStorage.removeItem('alphatrade_user_email');
+      localStorage.removeItem('alphatrade_user_name');
+      syncAuthState();
+    }
+
+    function openBrokerModal() {
+      const modal = document.getElementById('broker-modal');
+      if (modal) modal.classList.add('active');
+      const statusMsg = document.getElementById('broker-status-msg');
+      if (statusMsg) statusMsg.style.display = 'none';
+      loadBrokerCredentialsIntoForm();
+    }
+
+    function closeBrokerModal() {
+      const modal = document.getElementById('broker-modal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    async function loadBrokerCredentialsIntoForm() {
+      const token = localStorage.getItem('alphatrade_jwt_token');
+      if (!token) return;
+
+      try {
+        const resp = await apiFetch('/auth/broker-credentials');
+        const disconnectBtn = document.getElementById('btn-disconnect-broker');
+        if (resp.ok) {
+          const creds = await resp.json();
+          if (creds && creds.client_code) {
+            document.getElementById('broker-client-code').value = creds.client_code;
+            document.getElementById('broker-capital').value = creds.target_capital_inr || 5000;
+            document.getElementById('broker-risk-profile').value = creds.risk_strategy_profile || 'ASYMMETRIC_25PCT_MOMENTUM';
+            document.getElementById('broker-live-consent').checked = !!creds.live_trading_consent;
+
+            const apiKeyEl = document.getElementById('broker-api-key');
+            const totpEl = document.getElementById('broker-totp');
+            const passEl = document.getElementById('broker-password');
+
+            apiKeyEl.value = '';
+            apiKeyEl.placeholder = creds.has_api_key ? '•••••••• (Encrypted at Rest)' : 'SmartAPI Developer Key';
+            apiKeyEl.required = !creds.has_api_key;
+
+            totpEl.value = '';
+            totpEl.placeholder = creds.has_totp_secret ? '•••••••• (Encrypted at Rest)' : 'e.g. PQQNAFSM44DJQV2HFVF33LBCPQ';
+            totpEl.required = !creds.has_totp_secret;
+
+            passEl.value = '';
+            passEl.placeholder = creds.has_password ? '•••••••• (Encrypted at Rest)' : 'Trading PIN or Password';
+            passEl.required = !creds.has_password;
+
+            if (disconnectBtn) disconnectBtn.style.display = 'block';
+            return;
+          }
+        }
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+      } catch (err) {
+        console.warn('Failed to load broker credentials', err);
+      }
+    }
+
+    async function saveBrokerCredentials(e) {
+      e.preventDefault();
+      const statusMsg = document.getElementById('broker-status-msg');
+      if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.background = '#EFF6FF';
+        statusMsg.style.color = '#1D4ED8';
+        statusMsg.textContent = '🔒 Encrypting & saving credentials to AES-256 vault...';
+      }
+
+      const clientCode = document.getElementById('broker-client-code').value.trim();
+      const apiKey = document.getElementById('broker-api-key').value.trim();
+      const totp = document.getElementById('broker-totp').value.trim();
+      const pass = document.getElementById('broker-password').value.trim();
+      const capital = parseFloat(document.getElementById('broker-capital').value) || 5000;
+      const riskProfile = document.getElementById('broker-risk-profile').value;
+      const consent = document.getElementById('broker-live-consent').checked;
+
+      const payload = {
+        client_code: clientCode,
+        target_capital_inr: capital,
+        risk_strategy_profile: riskProfile,
+        live_trading_consent: consent
+      };
+      if (apiKey) payload.api_key = apiKey;
+      if (totp) payload.totp_secret = totp;
+      if (pass) payload.password = pass;
+
+      try {
+        const resp = await apiFetch('/auth/broker-credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          if (statusMsg) {
+            statusMsg.style.background = '#ECFDF5';
+            statusMsg.style.color = '#065F46';
+            statusMsg.textContent = '✅ Broker credentials saved and encrypted successfully!';
+          }
+          await syncAuthState();
+          setTimeout(() => { closeBrokerModal(); }, 1200);
+        } else {
+          if (statusMsg) {
+            statusMsg.style.background = '#FEF2F2';
+            statusMsg.style.color = '#B91C1C';
+            statusMsg.textContent = '❌ Failed to save: ' + (data.detail || JSON.stringify(data));
+          }
+        }
+      } catch (err) {
+        if (statusMsg) {
+          statusMsg.style.background = '#FEF2F2';
+          statusMsg.style.color = '#B91C1C';
+          statusMsg.textContent = '❌ Network error: ' + err.message;
+        }
+      }
+    }
+
+    async function testBrokerCredentials() {
+      const statusMsg = document.getElementById('broker-status-msg');
+      if (statusMsg) {
+        statusMsg.style.display = 'block';
+        statusMsg.style.background = '#EFF6FF';
+        statusMsg.style.color = '#1D4ED8';
+        statusMsg.textContent = '🔌 Testing live Angel One SmartAPI connection and fetching RMS margins...';
+      }
+
+      const clientCode = document.getElementById('broker-client-code').value.trim();
+      const apiKey = document.getElementById('broker-api-key').value.trim();
+      const totp = document.getElementById('broker-totp').value.trim();
+      const pass = document.getElementById('broker-password').value.trim();
+      const capital = parseFloat(document.getElementById('broker-capital').value) || 5000;
+      const riskProfile = document.getElementById('broker-risk-profile').value;
+      const consent = document.getElementById('broker-live-consent').checked;
+
+      let payload = null;
+      if (apiKey && clientCode && totp && pass) {
+        payload = {
+          client_code: clientCode,
+          api_key: apiKey,
+          totp_secret: totp,
+          password: pass,
+          target_capital_inr: capital,
+          risk_strategy_profile: riskProfile,
+          live_trading_consent: consent
+        };
+      }
+
+      try {
+        const resp = await apiFetch('/auth/broker-credentials/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload ? JSON.stringify(payload) : null
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'SUCCESS') {
+          if (statusMsg) {
+            statusMsg.style.background = '#ECFDF5';
+            statusMsg.style.color = '#065F46';
+            statusMsg.innerHTML = `✅ <strong>Connected to Angel One SmartAPI!</strong><br>Client: ${data.client_code}<br>Available Cash Margin: ₹${data.available_cash_inr}<br>Total Equity: ₹${data.total_equity_inr}`;
+          }
+        } else {
+          if (statusMsg) {
+            statusMsg.style.background = '#FEF2F2';
+            statusMsg.style.color = '#B91C1C';
+            statusMsg.textContent = '❌ Connection failed: ' + (data.message || data.detail || 'Authentication error');
+          }
+        }
+      } catch (err) {
+        if (statusMsg) {
+          statusMsg.style.background = '#FEF2F2';
+          statusMsg.style.color = '#B91C1C';
+          statusMsg.textContent = '❌ Test failed: ' + err.message;
+        }
+      }
+    }
+
+    async function deleteBrokerCredentials() {
+      if (!confirm('Are you sure you want to disconnect your Angel One SmartAPI credentials? Automated live trading will stop for your account.')) return;
+      try {
+        const resp = await apiFetch('/auth/broker-credentials', { method: 'DELETE' });
+        if (resp.ok) {
+          alert('Broker credentials disconnected.');
+          closeBrokerModal();
+          await syncAuthState();
+        } else {
+          alert('Failed to disconnect: ' + (await resp.text()));
+        }
+      } catch (err) {
+        alert('Error disconnecting: ' + err.message);
+      }
+    }
+
+    async function syncAuthState() {
+      const token = localStorage.getItem('alphatrade_jwt_token');
+      const btnLogin = document.getElementById('btn-user-login');
+      const profileBadge = document.getElementById('user-profile-badge');
+      const emailLabel = document.getElementById('user-email-label');
+      const brokerBadge = document.getElementById('btn-broker-badge');
+
+      if (!token) {
+        if (btnLogin) btnLogin.style.display = 'inline-block';
+        if (profileBadge) profileBadge.style.display = 'none';
+        return;
+      }
+
+      try {
+        const resp = await apiFetch('/auth/me');
+        if (!resp.ok) {
+          // Token expired or invalid
+          localStorage.removeItem('alphatrade_jwt_token');
+          if (btnLogin) btnLogin.style.display = 'inline-block';
+          if (profileBadge) profileBadge.style.display = 'none';
+          return;
+        }
+        const user = await resp.json();
+        if (btnLogin) btnLogin.style.display = 'none';
+        if (profileBadge) profileBadge.style.display = 'flex';
+        if (emailLabel) emailLabel.textContent = user.full_name || user.email;
+
+        // Check broker credential status
+        const credResp = await apiFetch('/auth/broker-credentials');
+        if (credResp.ok) {
+          const creds = await credResp.json();
+          if (creds && creds.client_code) {
+            if (brokerBadge) {
+              brokerBadge.textContent = '🟢 Angel One: ' + creds.client_code;
+              brokerBadge.style.background = '#065F46';
+              brokerBadge.style.borderColor = '#10B981';
+            }
+            return;
+          }
+        }
+        if (brokerBadge) {
+          brokerBadge.textContent = '⚙️ Connect Broker';
+          brokerBadge.style.background = '#0F766E';
+          brokerBadge.style.borderColor = '#2DD4BF';
+        }
+      } catch (err) {
+        console.warn('Auth sync failed', err);
+      }
+    }
+
+    // Close modals when clicking backdrop
+    window.addEventListener('click', function(e) {
+      const authModal = document.getElementById('auth-modal');
+      const brokerModal = document.getElementById('broker-modal');
+      if (e.target === authModal) closeAuthModal();
+      if (e.target === brokerModal) closeBrokerModal();
+    });
+
     // Auto-refresh every 5 seconds
     setInterval(refreshAllData, 5000);
     // Initial fetch on load
     refreshAllData();
+    // Multi-tenant auth sync on load
+    syncAuthState();
     // M28: Initial recovery status load
     refreshRecoveryStatus(null);
     // M29: Initial compliance status load

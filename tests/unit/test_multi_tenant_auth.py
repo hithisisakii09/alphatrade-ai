@@ -177,3 +177,47 @@ def test_broker_credential_encryption_and_storage(client):
   get_after = client.get("/auth/broker-credentials", headers=auth_headers)
   assert get_after.status_code == 200
   assert get_after.json() is None
+
+
+def test_broker_connectivity_endpoint(client, monkeypatch):
+  from unittest.mock import MagicMock
+  from app.execution.gateway import BrokerMarginInfo
+  import decimal
+
+  unique_id = uuid.uuid4().hex[:8]
+  email = f"test_gw_{unique_id}@alphatrade.ai"
+  client.post("/auth/register", json={
+      "email": email,
+      "password": "Password12345!",
+      "full_name": "Gateway Tester",
+      "role": "TRADER",
+  })
+  login = client.post("/auth/login", json={"email": email, "password": "Password12345!"}).json()
+  token = login["access_token"]
+  auth_headers = {"Authorization": f"Bearer {token}"}
+
+  mock_gw = MagicMock()
+  mock_gw.get_margins.return_value = BrokerMarginInfo(
+      available_cash=decimal.Decimal("1235.03"),
+      used_margin=decimal.Decimal("0.00"),
+      total_equity=decimal.Decimal("1235.03")
+  )
+  monkeypatch.setattr("app.execution.gateway.LiveAngelSmartAPIGateway", lambda **kwargs: mock_gw)
+
+  test_payload = {
+      "broker_name": "ANGEL_ONE",
+      "client_code": "S54949978",
+      "api_key": "LIVE_API_KEY_TEST",
+      "totp_secret": "PQQNAFSM44DJQV2HFVF33LBCPQ",
+      "password": "Password123",
+      "risk_profile": "ASYMMETRIC_25PCT_MOMENTUM",
+      "reference_capital": 5000.0,
+      "is_live_authorized": True,
+      "fno_enabled": True
+  }
+  resp = client.post("/auth/broker-credentials/test", json=test_payload, headers=auth_headers)
+  assert resp.status_code == 200
+  data = resp.json()
+  assert data["status"] == "SUCCESS"
+  assert data["client_code"] == "S54949978"
+  assert "1235.03" in data["available_cash_inr"]
