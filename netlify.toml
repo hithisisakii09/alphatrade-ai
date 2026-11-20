@@ -1,0 +1,25 @@
+# ==============================================================================
+# AlphaTrade AI — Netlify Edge Configuration
+# ==============================================================================
+
+[build]
+  # Directory containing static dashboard frontend assets
+  publish = "dashboard"
+  # No build command needed for plain static HTML/CSS/JS dashboard
+  command = ""
+
+# --- Security Headers ---
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# --- Single Page Application (SPA) Fallback ---
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

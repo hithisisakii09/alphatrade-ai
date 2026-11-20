@@ -1419,9 +1419,32 @@
       if (btn) btn.classList.add('active');
     }
 
-    async function fetchJson(endpoint) {
+    function getApiBase() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramApi = urlParams.get('api');
+      if (paramApi) {
+        localStorage.setItem('alphatrade_api_url', paramApi);
+        return paramApi.replace(/\/+$/, '');
+      }
+      const stored = localStorage.getItem('alphatrade_api_url');
+      if (stored) return stored.replace(/\/+$/, '');
+      return '';
+    }
+
+    async function apiFetch(endpoint, options = {}) {
+      const base = getApiBase();
+      const url = endpoint.startsWith('http') ? endpoint : (base + endpoint);
+      const token = localStorage.getItem('alphatrade_jwt_token');
+      const headers = Object.assign({}, options.headers || {});
+      if (token && !headers['Authorization']) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      return fetch(url, Object.assign({}, options, { headers }));
+    }
+
+    async function fetchJson(endpoint, options = {}) {
       try {
-        const resp = await fetch(endpoint);
+        const resp = await apiFetch(endpoint, options);
         if (!resp.ok) return null;
         return await resp.json();
       } catch (e) {
@@ -2265,7 +2288,7 @@
         btn.disabled = true;
       }
       try {
-        const resp = await fetch('/backtest/run', { method: 'POST' });
+        const resp = await apiFetch('/backtest/run', { method: 'POST' });
         const res = await resp.json();
         if (res.status === 'SUCCESS') {
           alert(`Simulation Completed Successfully!\nRun ID: ${res.run_id}\nTotal Trades: ${res.total_trades}\nWin Rate: ${Number(res.win_rate_pct).toFixed(1)}%\nProfit Factor: ${res.profit_factor}\nNet Exp: ₹${Number(res.net_expectancy_inr).toFixed(2)} (${res.net_expectancy_r} R)\nClassification: ${res.evidence_classification}`);
@@ -2730,7 +2753,7 @@
         btn.disabled = true;
       }
       try {
-        const resp = await fetch('/runner/tick', { method: 'POST' });
+        const resp = await apiFetch('/runner/tick', { method: 'POST' });
         const res = await resp.json();
         if (res.status === 'SUCCESS' && res.summary) {
           alert(`Live Evaluation Tick Finished!\nStatus: ${res.summary.status}\nSymbols Evaluated: ${res.summary.symbols_evaluated}\nSignals Generated: ${res.summary.signals_generated.length}\nOrders Placed: ${res.summary.orders_placed.length}\nPositions Closed: ${res.summary.positions_closed.length}`);
@@ -2753,7 +2776,7 @@
       const targetEndpoint = window._pollerEnabled ? '/runner/poller/disable' : '/runner/poller/enable';
       try {
         if (btn) btn.disabled = true;
-        const resp = await fetch(targetEndpoint, { method: 'POST' });
+        const resp = await apiFetch(targetEndpoint, { method: 'POST' });
         await resp.json();
         await refreshAllData();
       } catch (e) {
@@ -2802,7 +2825,7 @@
     async function triggerRecoveryCheckpoint(e) {
       if (e && e.target) { e.target.textContent = 'Saving...'; e.target.disabled = true; }
       try {
-        const r = await fetch('/system/recovery/checkpoint', {method: 'POST'});
+        const r = await apiFetch('/system/recovery/checkpoint', {method: 'POST'});
         const d = await r.json();
         alert('Snapshot Created!\nID: ' + d.snapshot_id + '\nSHA-256: ' + d.sha256 + '\nPositions: ' + d.positions_captured);
         refreshRecoveryStatus(null);
@@ -2936,7 +2959,7 @@
     async function triggerPreFlightAudit(e) {
       if (e && e.target) { e.target.textContent = 'Auditing...'; e.target.disabled = true; }
       try {
-        const r = await fetch('/system/preflight/run', {method: 'POST'});
+        const r = await apiFetch('/system/preflight/run', {method: 'POST'});
         const d = await r.json();
         alert('Pre-Flight Audit Complete!\n\nVerdict: ' + d.overall_decision +
           '\nPassed: ' + d.passed_count + ' / ' + d.checks.length +
@@ -2953,7 +2976,7 @@
     async function exitPositionAsap(symbol) {
       if (!confirm(`Are you sure you want to sell ${symbol} autonomously ASAP to free wallet capital for the next trade?`)) return;
       try {
-        const r = await fetch(`/positions/${encodeURIComponent(symbol)}/exit`, {method: 'POST'});
+        const r = await apiFetch(`/positions/${encodeURIComponent(symbol)}/exit`, {method: 'POST'});
         const d = await r.json();
         if (d.status === 'SUCCESS') {
           alert(`✅ Position for ${symbol} closed autonomously!\nExit Price: ₹${d.exit_price}\nRealized P&L: ₹${d.realized_pnl_inr}\nUpdated Wallet Balance: ₹${d.new_cash_balance_inr}\n\nWallet is now freed for the next trade!`);
@@ -2969,7 +2992,7 @@
     async function exitAllPositionsAsap() {
       if (!confirm('Are you sure you want to autonomously close ALL open positions right now and free all margin?')) return;
       try {
-        const r = await fetch('/positions/exit-all', {method: 'POST'});
+        const r = await apiFetch('/positions/exit-all', {method: 'POST'});
         const d = await r.json();
         if (d.status === 'SUCCESS') {
           alert(`✅ Closed ${d.total_closed} position(s) autonomously!\nAvailable Wallet Cash: ₹${d.available_cash_inr}\n\nAll funds are freed and ready for the next trade!`);
