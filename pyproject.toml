@@ -17,6 +17,8 @@ dependencies = [
     "httpx>=0.24.0",
     "apscheduler>=3.11.0",
     "tzdata>=2024.1",
+    "cryptography>=42.0.0",
+    "pyjwt>=2.8.0",
 ]
 
 [tool.pytest.ini_options]

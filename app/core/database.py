@@ -237,6 +237,36 @@ CREATE TABLE IF NOT EXISTS audit_events (
     severity VARCHAR(16) NOT NULL DEFAULT 'INFO',
     payload_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id VARCHAR(64) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(128) NOT NULL DEFAULT '',
+    role VARCHAR(32) NOT NULL DEFAULT 'TRADER',
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at_utc TIMESTAMP NOT NULL,
+    updated_at_utc TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_broker_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    credential_id VARCHAR(64) UNIQUE NOT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    broker_name VARCHAR(64) NOT NULL DEFAULT 'ANGEL_ONE',
+    client_code VARCHAR(64) NOT NULL,
+    encrypted_api_key TEXT NOT NULL,
+    encrypted_totp_secret TEXT NOT NULL,
+    encrypted_password TEXT NOT NULL,
+    is_live_authorized BOOLEAN NOT NULL DEFAULT 0,
+    risk_profile VARCHAR(64) NOT NULL DEFAULT 'ASYMMETRIC_25PCT_MOMENTUM',
+    reference_capital NUMERIC(14,2) NOT NULL DEFAULT 5000.00,
+    fno_enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at_utc TIMESTAMP NOT NULL,
+    updated_at_utc TIMESTAMP NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(user_id)
+);
 """
 
 
@@ -340,6 +370,14 @@ class BacktestTradeRecord(BaseRecord):
 
 class AuditEventRecord(BaseRecord):
   __tablename__ = "audit_events"
+
+
+class UserRecord(BaseRecord):
+  __tablename__ = "users"
+
+
+class UserBrokerCredentialRecord(BaseRecord):
+  __tablename__ = "user_broker_credentials"
 
 
 def _serialize_value(val: Any) -> Any:
